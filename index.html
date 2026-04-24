@@ -226,20 +226,41 @@
             });
         }
 
+        let frameSkip = 0;
+        let lastDetect = null;
+
         function loop() {
 
             if (video.currentTime !== lastVideoTime) {
 
                 lastVideoTime = video.currentTime;
+                frameSkip++;
 
-                const result = faceLandmarker.detectForVideo(video, performance.now());
+                /* DETECTA SOMENTE METADE DOS FRAMES */
+                if (frameSkip % 2 === 0) {
 
-                if (result.faceLandmarks && result.faceLandmarks[0]) {
-                    updateLips(result.faceLandmarks[0]);
+                    const result =
+                        faceLandmarker.detectForVideo(video, performance.now());
+
+                    if (result.faceLandmarks && result.faceLandmarks[0]) {
+
+                        lastDetect = result.faceLandmarks[0];
+                        updateLips(lastDetect);
+
+                    } else {
+
+                        lipMesh.visible = false;
+                    }
+
                 } else {
-                    lipMesh.visible = false;
-                }
 
+                    /* ENTRE FRAMES: reaproveita último tracking */
+                    if (lastDetect) {
+                        updateLips(lastDetect);
+                    } else {
+                        renderer.render(scene, camera);
+                    }
+                }
             }
 
             video.requestVideoFrameCallback(loop);
@@ -258,7 +279,7 @@
                 let dy = Math.abs(landmarks[i].y - smoothed[i].y);
 
                 let speed = dx + dy;
-                let factor = speed > .01 ? .58 : .22;
+                let factor = speed > 0.01 ? 0.82 : 0.42;
 
                 smoothed[i].x += (landmarks[i].x - smoothed[i].x) * factor;
                 smoothed[i].y += (landmarks[i].y - smoothed[i].y) * factor;
