@@ -226,7 +226,7 @@
             shape.holes = [hole];
 
             // --- 4. QUALIDADE DO SHAPE ---
-            // Mude de 8 para 12 se quiser bordas mais arredondadas e suaves.
+            // Mude de 8 para 12 se quiser bordas mais arredondadas e suaves*(SUBDIVISOES).
             if (lipMesh.geometry) lipMesh.geometry.dispose();
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 12);
 
