@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Lipstick Fast</title>
+    <title>Anatomical AR Lips - Ultra Responsive</title>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -21,8 +21,8 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            font-family: 'Segoe UI',system-ui,sans-serif;
-            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: white;
         }
 
         #container {
@@ -33,7 +33,7 @@
             border-radius: 30px;
             overflow: hidden;
             border: 1px solid #333;
-            box-shadow: 0 20px 60px rgba(0,0,0,.8);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
         }
 
         video, #three_container {
@@ -46,7 +46,7 @@
 
         .ui-panel {
             margin-top: 25px;
-            background: rgba(20,20,20,.95);
+            background: rgba(20, 20, 20, 0.95);
             padding: 20px;
             border-radius: 25px;
             width: 550px;
@@ -62,11 +62,13 @@
             color: #888;
             margin-bottom: 15px;
             font-weight: bold;
+            text-transform: uppercase;
             letter-spacing: 1px;
         }
 
         .swatches {
             display: flex;
+            justify-content: center;
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -77,29 +79,34 @@
             border-radius: 50%;
             cursor: pointer;
             border: 3px solid transparent;
-            transition: .2s;
+            transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
             .swatch.active {
-                border-color: #fff;
+                border-color: white;
                 transform: scale(1.1);
-                box-shadow: 0 0 15px rgba(255,255,255,.2);
+                box-shadow: 0 0 15px rgba(255,255,255,0.2);
             }
 
         .slider-container {
             width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
-            height: 6px;
             cursor: pointer;
+            height: 6px;
+            border-radius: 5px;
         }
 
         .labels {
             display: flex;
             justify-content: space-between;
+            width: 100%;
             font-size: 10px;
             color: #666;
             margin-top: 8px;
@@ -107,258 +114,145 @@
         }
     </style>
 </head>
-
 <body>
 
     <div id="container">
-        <video id="webcam" autoplay playsinline muted></video>
+        <video id="webcam" autoplay playsinline></video>
         <div id="three_container"></div>
     </div>
 
     <div class="ui-panel">
         <div class="ui-title">カラーを選択してください</div>
-
         <div class="swatches">
-            <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
-            <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
-            <div class="swatch" style="background:#f28b82" onclick="changeColor(0xf28b82,this)"></div>
-            <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
-            <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
+            <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
+            <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
+            <div class="swatch" style="background: #f28b82;" onclick="changeColor(0xf28b82, this)"></div>
+            <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
+            <div class="swatch" style="background: #000000;" onclick="changeColor(0x000000, this)"></div>
         </div>
-
         <div class="slider-container">
-            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.45" oninput="updateOpacity(this.value)">
-            <div class="labels">
-                <span>ナチュラル</span>
-                <span id="int-val">45%</span>
-                <span>ビビッド</span>
-            </div>
+            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.4" oninput="updateOpacity(this.value)">
+            <div class="labels"><span>ナチュラル</span><span id="int-val">40%</span><span>ビビッド</span></div>
         </div>
     </div>
 
     <script type="module">
-
-        import {
-            FaceLandmarker,
-            FilesetResolver
-        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
         const video = document.getElementById("webcam");
-
-        let faceLandmarker;
-        let scene, camera, renderer;
-        let lipMesh, lipMaterial;
-
+        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
         let lastVideoTime = -1;
-        let smoothed = null;
+        let smoothedLandmarks = null;
 
-        const OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
-        const INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+        // Ajuste de velocidade de resposta (0.4 = Muito rápido, estável para abrir a boca)
+        const SMOOTH_FACTOR = 0.4;
+
+        const LIPS_OUTER_DETAILED = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
+        const LIPS_INNER_DETAILED = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
 
         async function init() {
-
-            const filesetResolver =
-                await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-                );
-
-            faceLandmarker =
-                await FaceLandmarker.createFromOptions(filesetResolver, {
-                    baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                        delegate: "GPU"
-                    },
-                    runningMode: "VIDEO",
-                    numFaces: 1
-                });
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO", numFaces: 1
+            });
 
             scene = new THREE.Scene();
-
             camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
             camera.position.z = 1;
 
-            renderer = new THREE.WebGLRenderer({
-                alpha: true,
-                antialias: false
-            });
-
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
             renderer.setSize(640, 480);
-            renderer.setPixelRatio(1);
-
-            document.getElementById("three_container")
-                .appendChild(renderer.domElement);
+            document.getElementById('three_container').appendChild(renderer.domElement);
 
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.45,
-                side: THREE.DoubleSide,
-                depthWrite: false,
-                blending: THREE.NormalBlending
+                opacity: 0.4,
+                side: THREE.DoubleSide
             });
 
-            lipMesh = new THREE.Mesh(
-                new THREE.BufferGeometry(),
-                lipMaterial
-            );
-
+            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
 
             startCamera();
         }
 
         function startCamera() {
-
             navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: 640,
-                    height: 480,
-                    frameRate: { ideal: 30, max: 60 }
-                }
-            }).then(stream => {
-
+                video: { width: 640, height: 480, frameRate: { ideal: 60 } }
+            }).then((stream) => {
                 video.srcObject = stream;
-                video.requestVideoFrameCallback(loop);
-
+                video.onloadedmetadata = () => {
+                    // Inicia o loop de detecção sincronizado com o frame do vídeo
+                    video.requestVideoFrameCallback(predictWebcam);
+                };
             });
         }
 
-        function loop() {
-
+        function predictWebcam() {
             if (video.currentTime !== lastVideoTime) {
-
                 lastVideoTime = video.currentTime;
+                const results = faceLandmarker.detectForVideo(video, performance.now());
+                if (results.faceLandmarks && results.faceLandmarks[0]) {
+                    updateVisuals(results.faceLandmarks[0]);
+                }
+            }
+            video.requestVideoFrameCallback(predictWebcam);
+        }
 
-                const result =
-                    faceLandmarker.detectForVideo(
-                        video,
-                        performance.now()
-                    );
-
-                if (result.faceLandmarks &&
-                    result.faceLandmarks[0]) {
-
-                    updateLips(result.faceLandmarks[0]);
-
-                } else {
-
-                    lipMesh.visible = false;
-                    renderer.render(scene, camera);
-
+        function updateVisuals(landmarks) {
+            // Inicialização ou suavização dos pontos
+            if (!smoothedLandmarks) {
+                smoothedLandmarks = landmarks.map(p => ({ x: p.x, y: p.y }));
+            } else {
+                for (let i = 0; i < landmarks.length; i++) {
+                    smoothedLandmarks[i].x += (landmarks[i].x - smoothedLandmarks[i].x) * SMOOTH_FACTOR;
+                    smoothedLandmarks[i].y += (landmarks[i].y - smoothedLandmarks[i].y) * SMOOTH_FACTOR;
                 }
             }
 
-            video.requestVideoFrameCallback(loop);
-        }
+            const mouthShape = new THREE.Shape();
 
-        function smooth(landmarks) {
-
-            if (!smoothed) {
-                smoothed = landmarks.map(p => ({
-                    x: p.x,
-                    y: p.y,
-                    z: p.z
-                }));
-                return;
-            }
-
-            for (let i = 0; i < landmarks.length; i++) {
-
-                const dx =
-                    Math.abs(landmarks[i].x - smoothed[i].x);
-
-                const dy =
-                    Math.abs(landmarks[i].y - smoothed[i].y);
-
-                const speed = dx + dy;
-
-                const factor =
-                    speed > 0.01 ? 0.72 : 0.28;
-
-                smoothed[i].x +=
-                    (landmarks[i].x - smoothed[i].x) * factor;
-
-                smoothed[i].y +=
-                    (landmarks[i].y - smoothed[i].y) * factor;
-            }
-        }
-
-        let prevX = 0;
-        let prevY = 0;
-
-        function updateLips(landmarks) {
-
-            lipMesh.visible = true;
-
-            smooth(landmarks);
-
-            const center = smoothed[13];
-
-            const move =
-                Math.abs(center.x - prevX) +
-                Math.abs(center.y - prevY);
-
-            prevX = center.x;
-            prevY = center.y;
-
-            if (move < 0.0015) {
-                renderer.render(scene, camera);
-                return;
-            }
-
-            const shape = new THREE.Shape();
-
-            OUTER.forEach((id, i) => {
-                const p = smoothed[id];
-
-                if (i === 0)
-                    shape.moveTo(p.x, 1 - p.y);
-                else
-                    shape.lineTo(p.x, 1 - p.y);
+            // Contorno Externo
+            LIPS_OUTER_DETAILED.forEach((idx, i) => {
+                const p = smoothedLandmarks[idx];
+                if (i === 0) mouthShape.moveTo(p.x, 1 - p.y);
+                else mouthShape.lineTo(p.x, 1 - p.y);
             });
 
-            const hole = new THREE.Path();
-
-            INNER.forEach((id, i) => {
-                const p = smoothed[id];
-
-                if (i === 0)
-                    hole.moveTo(p.x, 1 - p.y);
-                else
-                    hole.lineTo(p.x, 1 - p.y);
+            // Contorno Interno (O "Furo" que se move com a boca)
+            const holePath = new THREE.Path();
+            LIPS_INNER_DETAILED.forEach((idx, i) => {
+                const p = smoothedLandmarks[idx];
+                if (i === 0) holePath.moveTo(p.x, 1 - p.y);
+                else holePath.lineTo(p.x, 1 - p.y);
             });
+            mouthShape.holes = [holePath]; // Força a atualização do buraco
 
-            shape.holes = [hole];
-
-            if (lipMesh.geometry)
-                lipMesh.geometry.dispose();
-
-            lipMesh.geometry =
-                new THREE.ShapeGeometry(shape, 1);
+            // Atualização Crucial: Deletar a geometria antiga e criar a nova a cada frame
+            if (lipMesh.geometry) lipMesh.geometry.dispose();
+            lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 4);
 
             renderer.render(scene, camera);
         }
 
+        // Handlers da Interface
         window.changeColor = (hex, el) => {
-
             lipMaterial.color.setHex(hex);
-
-            document.querySelectorAll(".swatch")
-                .forEach(s => s.classList.remove("active"));
-
-            el.classList.add("active");
+            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
         };
 
-        window.updateOpacity = (v) => {
-
-            lipMaterial.opacity = v;
-
-            document.getElementById("int-val")
-                .innerText = Math.round(v * 100) + "%";
+        window.updateOpacity = (val) => {
+            lipMaterial.opacity = parseFloat(val);
+            document.getElementById('int-val').innerText = Math.round(val * 100) + "%";
         };
 
         init();
-
     </script>
 </body>
 </html>
