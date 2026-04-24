@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick Pro - Final Version</title>
+    <title>AR Lipstick Pro - Final Fixed</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -120,8 +120,12 @@
         async function init() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
-                runningMode: "VIDEO", numFaces: 1
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                numFaces: 1
             });
 
             scene = new THREE.Scene();
@@ -157,7 +161,7 @@
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then(stream => {
                 video.srcObject = stream;
                 video.requestVideoFrameCallback(loop);
-            });
+            }).catch(err => console.error("Camera error:", err));
         }
 
         function loop() {
@@ -182,29 +186,23 @@
             const center = smoothed[13];
             const shape = new THREE.Shape();
 
-            // --- AJUSTE EXTERNO (OUTER) ---
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
-                let sY = 1.02; // Escala vertical padrão
-                let sX = 1.15; // Esticamento horizontal para os cantos
-
-                // Ajustes finos de curvatura que você pediu
-                if (id === 37 || id === 0 || id === 267) sY = 1.0; // Arco do Cupido no limite natural
-                if (id === 17) sY = 1.0; // Lábio inferior no limite natural
-
+                let sY = 1.02;
+                let sX = 1.15;
+                if (id === 37 || id === 0 || id === 267) sY = 1.0;
+                if (id === 17) sY = 1.0;
                 const x = center.x + (p.x - center.x) * sX;
                 const y = center.y + (p.y - center.y) * sY;
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
             });
 
-            // --- AJUSTE INTERNO (INNER) - FIX PARA NÃO PINTAR OS DENTES ---
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
-                let sY_inner = 1.05; // Furo maior verticalmente para limpar dentes
-                let sX_inner = 1.15; // Acompanha o esticamento horizontal
-
+                let sY_inner = 1.05;
+                let sX_inner = 1.15;
                 const x = center.x + (p.x - center.x) * sX_inner;
                 const y = center.y + (p.y - center.y) * sY_inner;
                 if (i === 0) hole.moveTo(x, 1 - y);
@@ -213,7 +211,7 @@
             shape.holes = [hole];
 
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 8); // Subdivisões altas para suavidade
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 8);
 
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
@@ -224,10 +222,10 @@
                 uv[i * 2 + 1] = (pos.getY(i) - bBox.min.y) / size.y;
             }
             lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-
             renderer.render(scene, camera);
         }
 
+        // Funções globais para os botões e slider
         window.changeColor = (hex, el) => {
             lipMaterial.uniforms.uColor.value.setHex(hex);
             document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
@@ -240,7 +238,6 @@
         };
 
         init();
-        });
     </script>
 </body>
 </html>
