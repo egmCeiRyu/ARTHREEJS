@@ -1,29 +1,38 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>High-Precision Real-Time AR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Makeup Pro - Alta Fidelidade</title>
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <style>
+        :root {
+            --accent: #ff4d6d;
+        }
+
         body {
             margin: 0;
-            background: #000;
+            background: #050505;
             overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            font-family: sans-serif;
         }
 
         #container {
             position: relative;
             width: 640px;
             height: 480px;
-            border-radius: 40px;
+            background: #000;
+            border-radius: 30px;
             overflow: hidden;
-            box-shadow: 0 0 50px rgba(0,0,0,1);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
             border: 2px solid #222;
         }
 
@@ -35,7 +44,7 @@
             object-fit: cover;
         }
 
-        canvas {
+        #three_container {
             position: absolute;
             width: 100%;
             height: 100%;
@@ -44,34 +53,61 @@
             pointer-events: none;
         }
 
-        .ui {
+        .ui-panel {
             position: absolute;
             bottom: 20px;
             z-index: 20;
             background: rgba(15,15,15,0.9);
             padding: 20px;
-            border-radius: 30px;
-            width: 80%;
+            border-radius: 25px;
+            width: 85%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid #333;
             left: 50%;
             transform: translateX(-50%);
-            border: 1px solid #333;
-            backdrop-filter: blur(10px);
         }
 
-        .swatches {
+        .category-tabs {
             display: flex;
-            justify-content: center;
-            gap: 15px;
+            gap: 10px;
             margin-bottom: 15px;
         }
 
+        .tab {
+            padding: 8px 15px;
+            background: #222;
+            border-radius: 15px;
+            cursor: pointer;
+            color: #666;
+            font-size: 11px;
+            transition: 0.2s;
+            text-transform: uppercase;
+        }
+
+            .tab.active {
+                background: var(--accent);
+                color: white;
+            }
+
+        .palette {
+            display: none;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+            .palette.active {
+                display: flex;
+            }
+
         .swatch {
-            width: 35px;
-            height: 35px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             cursor: pointer;
             border: 2px solid transparent;
-            transition: 0.3s;
         }
 
             .swatch.active {
@@ -79,10 +115,23 @@
                 transform: scale(1.1);
             }
 
+        .slider-container {
+            width: 100%;
+        }
+
         input[type=range] {
             width: 100%;
-            accent-color: #ff4d6d;
+            accent-color: var(--accent);
             cursor: pointer;
+        }
+
+        .labels {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            font-size: 10px;
+            color: #555;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -91,101 +140,132 @@
     <div id="container">
         <video id="input_video" playsinline></video>
         <div id="three_container"></div>
-        <div class="ui">
-            <div class="swatches">
-                <div class="swatch active" style="background: #be1e2d;" onclick="updateStyle(0xbe1e2d, 0.4, this)"></div>
-                <div class="swatch" style="background: #8e2a4e;" onclick="updateStyle(0x8e2a4e, 0.6, this)"></div>
-                <div class="swatch" style="background: #ff4d6d;" onclick="updateStyle(0xff4d6d, 0.5, this)"></div>
-                <div class="swatch" style="background: #000000;" onclick="updateStyle(0x000000, 0.3, this)"></div>
+
+        <div class="ui-panel">
+            <div class="category-tabs">
+                <div id="tab_lips" class="tab active" onclick="switchTab('lips')">Lábios</div>
+                <div id="tab_brows" class="tab" onclick="switchTab('brows')">Sobrancelhas</div>
             </div>
-            <input type="range" min="0" max="1" step="0.01" value="0.75" id="smoothSlider">
-            <div style="font-size: 10px; color: #666; text-align: center; margin-top: 5px;">STABILIZATION STRENGTH</div>
+
+            <div id="lips_palette" class="palette active">
+                <div class="swatch active" style="background: #be1e2d;" onclick="changeColor('lips', 0xbe1e2d, this)"></div>
+                <div class="swatch" style="background: #8e2a4e;" onclick="changeColor('lips', 0x8e2a4e, this)"></div>
+                <div class="swatch" style="background: #ff4d6d;" onclick="changeColor('lips', 0xff4d6d, this)"></div>
+                <div class="swatch" style="background: #4a0e1e;" onclick="changeColor('lips', 0x4a0e1e, this)"></div>
+            </div>
+
+            <div id="brows_palette" class="palette">
+                <div class="swatch active" style="background: #212121;" onclick="changeColor('brows', 0x212121, this)"></div>
+                <div class="swatch" style="background: #3e2723;" onclick="changeColor('brows', 0x3e2723, this)"></div>
+                <div class="swatch" style="background: #4e342e;" onclick="changeColor('brows', 0x4e342e, this)"></div>
+            </div>
+
+            <div class="slider-container">
+                <input type="range" id="intensitySlider" min="0.1" max="0.9" step="0.01" value="0.4" oninput="updateIntensity(this.value)">
+                <div class="labels"><span>NATURAL</span><span id="int-val">40%</span><span>VIVID</span></div>
+            </div>
         </div>
     </div>
 
     <script>
         const videoElement = document.getElementById('input_video');
-        let scene, camera, renderer, lipMesh, material;
+        let scene, camera, renderer, lipMesh, browMeshL, browMeshR;
+        let lipMat, browMat;
         let smoothedLandmarks = null;
-        let smoothingFactor = 0.75; // Controla a precisão vs latência
+        let currentTab = 'lips';
+        const smoothingFactor = 0.3; // Movimento rápido
 
-        // Índices de Alta Precisão (Refined Landmarks)
-        const LIPS_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 408, 415, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
-        const LIPS_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
+        // MAPEAMENTO ANATÔMICO COMPLETO (40 pontos para lábios)
+        const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
+        const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+        const BROW_L = [70, 63, 105, 66, 107, 55, 65, 52, 53, 46, 70];
+        const BROW_R = [336, 296, 334, 293, 300, 276, 283, 282, 295, 285, 336];
 
-        function init() {
+        function initThree() {
             scene = new THREE.Scene();
-            camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 1000);
+            camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
             camera.position.z = 1;
 
-            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
             renderer.setSize(640, 480);
+            renderer.setPixelRatio(1);
             document.getElementById('three_container').appendChild(renderer.domElement);
 
-            material = new THREE.MeshBasicMaterial({
-                color: 0xbe1e2d,
-                transparent: true,
-                opacity: 0.5,
-                side: THREE.DoubleSide
-            });
+            lipMat = new THREE.MeshBasicMaterial({ color: 0xbe1e2d, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+            browMat = new THREE.MeshBasicMaterial({ color: 0x212121, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
 
-            const geometry = new THREE.BufferGeometry();
-            lipMesh = new THREE.Mesh(geometry, material);
-            scene.add(lipMesh);
+            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMat);
+            browMeshL = new THREE.Mesh(new THREE.BufferGeometry(), browMat);
+            browMeshR = new THREE.Mesh(new THREE.BufferGeometry(), browMat);
 
-            document.getElementById('smoothSlider').oninput = (e) => smoothingFactor = parseFloat(e.target.value);
+            scene.add(lipMesh, browMeshL, browMeshR);
         }
 
-        window.updateStyle = (hex, op, el) => {
-            material.color.setHex(hex);
-            material.opacity = op;
-            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        window.switchTab = (cat) => {
+            currentTab = cat;
+            document.querySelectorAll('.tab, .palette').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab_' + cat).classList.add('active');
+            document.getElementById(cat + '_palette').classList.add('active');
+            const activeMat = cat === 'lips' ? lipMat : browMat;
+            document.getElementById('intensitySlider').value = activeMat.opacity;
+            document.getElementById('int-val').innerText = Math.round(activeMat.opacity * 100) + "%";
+        };
+
+        window.changeColor = (cat, hex, el) => {
+            const mat = cat === 'lips' ? lipMat : browMat;
+            mat.color.setHex(hex);
+            el.parentElement.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
             el.classList.add('active');
         };
 
+        window.updateIntensity = (val) => {
+            const mat = currentTab === 'lips' ? lipMat : browMat;
+            mat.opacity = val;
+            document.getElementById('int-val').innerText = Math.round(val * 100) + "%";
+        };
+
+        function createGeo(landmarks, outerIndices, innerIndices = null) {
+            const shape = new THREE.Shape();
+            const start = landmarks[outerIndices[0]];
+            shape.moveTo(start.x, 1 - start.y);
+            outerIndices.forEach(idx => shape.lineTo(landmarks[idx].x, 1 - landmarks[idx].y));
+
+            if (innerIndices) {
+                const hole = new THREE.Path();
+                const startH = landmarks[innerIndices[0]];
+                hole.moveTo(startH.x, 1 - startH.y);
+                innerIndices.forEach(idx => hole.lineTo(landmarks[idx].x, 1 - landmarks[idx].y));
+                shape.holes.push(hole);
+            }
+            return new THREE.ShapeGeometry(shape);
+        }
+
         function onResults(results) {
             if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
-
             const landmarks = results.multiFaceLandmarks[0];
 
-            // --- LÓGICA DE PRECISÃO: FILTRO LERP ---
-            if (!smoothedLandmarks) {
-                smoothedLandmarks = landmarks;
-            } else {
-                smoothedLandmarks = landmarks.map((p, i) => ({
-                    x: smoothedLandmarks[i].x * smoothingFactor + p.x * (1 - smoothingFactor),
-                    y: smoothedLandmarks[i].y * smoothingFactor + p.y * (1 - smoothingFactor)
-                }));
+            if (!smoothedLandmarks) smoothedLandmarks = JSON.parse(JSON.stringify(landmarks));
+            else {
+                for (let i = 0; i < landmarks.length; i++) {
+                    smoothedLandmarks[i].x = smoothedLandmarks[i].x * smoothingFactor + landmarks[i].x * (1 - smoothingFactor);
+                    smoothedLandmarks[i].y = smoothedLandmarks[i].y * smoothingFactor + landmarks[i].y * (1 - smoothingFactor);
+                }
             }
 
-            // Criar forma geométrica precisa
-            const mouthShape = new THREE.Shape();
-            const startOuter = smoothedLandmarks[LIPS_OUTER[0]];
-            mouthShape.moveTo(startOuter.x, 1 - startOuter.y);
-            LIPS_OUTER.forEach(idx => {
-                const p = smoothedLandmarks[idx];
-                mouthShape.lineTo(p.x, 1 - p.y);
-            });
-
-            const holePath = new THREE.Path();
-            const startInner = smoothedLandmarks[LIPS_INNER[0]];
-            holePath.moveTo(startInner.x, 1 - startInner.y);
-            LIPS_INNER.forEach(idx => {
-                const p = smoothedLandmarks[idx];
-                holePath.lineTo(p.x, 1 - p.y);
-            });
-
-            mouthShape.holes.push(holePath);
-
-            const geometry = new THREE.ShapeGeometry(mouthShape);
             lipMesh.geometry.dispose();
-            lipMesh.geometry = geometry;
+            lipMesh.geometry = createGeo(smoothedLandmarks, LIPS_OUTER, LIPS_INNER);
+
+            browMeshL.geometry.dispose();
+            browMeshL.geometry = createGeo(smoothedLandmarks, BROW_L);
+
+            browMeshR.geometry.dispose();
+            browMeshR.geometry = createGeo(smoothedLandmarks, BROW_R);
 
             renderer.render(scene, camera);
         }
 
         const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-        faceMesh.setOptions({ refineLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        faceMesh.setOptions({ refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         faceMesh.onResults(onResults);
 
         const cameraHelper = new Camera(videoElement, {
@@ -193,7 +273,7 @@
             width: 640, height: 480
         });
 
-        init();
+        initThree();
         cameraHelper.start();
     </script>
 </body>
