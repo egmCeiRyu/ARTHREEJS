@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Lipstick HD - Normal Map Edition</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
+    <title>AR Lipstick HD - Elegant Lips Texture</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
@@ -19,7 +19,7 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            font-family: 'Segoe UI', sans-serif;
+            font-family: sans-serif;
             color: #fff;
         }
 
@@ -65,7 +65,6 @@
             border-radius: 50%;
             cursor: pointer;
             border: 3px solid transparent;
-            transition: .2s;
         }
 
             .swatch.active {
@@ -96,18 +95,18 @@
             <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
         </div>
         <div class="slider-container" style="width: 100%;">
-            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.5" oninput="updateOpacity(this.value)">
+            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
             <div style="display:flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 5px;">
-                <span>NATURAL</span><span id="int-val">50%</span><span>VIVID</span>
+                <span>NATURAL</span><span id="int-val">60%</span><span>VIVID</span>
             </div>
         </div>
     </div>
 
     <script type="module">
-        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
 
         const video = document.getElementById("webcam");
-        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
+        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial, elegantNormalMap;
         let smoothed = null;
         let lastVideoTime = -1;
 
@@ -115,7 +114,7 @@
         const INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
 
         async function init() {
-            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
                 baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
                 runningMode: "VIDEO", numFaces: 1
@@ -129,33 +128,52 @@
             renderer.setSize(640, 480);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-            // 1. CARREGAR NORMAL MAP (Textura de ranhuras de pele)
-            const loader = new THREE.TextureLoader();
-            const normalMap = loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg'); // Exemplo de textura rugosa
-            normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+            // --- GERAÇÃO PROCEDURAL DO NORMAL MAP ELEGANTE ---
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
 
-            // 2. MATERIAL COM REAÇÃO A LUZ E TEXTURA 3D
+            // Fundo neutro do Normal Map (Azul/Roxo neutro: rgb(128,128,255))
+            ctx.fillStyle = '#8080ff';
+            ctx.fillRect(0, 0, 128, 128);
+
+            // Criar ranhuras radiais/verticais finas
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i < 128; i += 2) {
+                // Variação sutil de cor para simular profundidade (entre rgb(100,128,255) e rgb(150,128,255))
+                const bump = 128 + (Math.random() - 0.5) * 40;
+                ctx.strokeStyle = `rgb(${bump}, 128, 255)`;
+
+                // Desenha linhas que convergem levemente para o centro
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(64 + (i - 64) * 0.8, 128); // Linhas não perfeitamente verticais
+                ctx.stroke();
+            }
+
+            elegantNormalMap = new THREE.CanvasTexture(canvas);
+            elegantNormalMap.wrapS = elegantNormalMap.wrapT = THREE.RepeatWrapping;
+
             lipMaterial = new THREE.MeshPhongMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.5,
-                normalMap: normalMap,
-                normalScale: new THREE.Vector2(0.8, 0.8), // Intensidade da textura
-                shininess: 40,
-                specular: 0x222222, // Brilho suave, sem estourar branco
+                opacity: 0.6,
+                normalMap: elegantNormalMap,
+                normalScale: new THREE.Vector2(0.4, 0.4), // Suavizado para elegância
+                shininess: 50,
+                specular: 0x222222, // Brilho suave
                 side: THREE.DoubleSide,
                 depthWrite: false
             });
 
-            // 3. ILUMINAÇÃO (Obrigatória para ver o Normal Map)
-            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            const pointLight = new THREE.PointLight(0xffffff, 0.6);
-            pointLight.position.set(0.5, 0.5, 1);
-            scene.add(pointLight);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+            // Luz direcional para destacar as novas ranhuras
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            directionalLight.position.set(0, 0, 1);
+            scene.add(directionalLight);
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
-
             startCamera();
         }
 
@@ -177,8 +195,7 @@
             video.requestVideoFrameCallback(loop);
         }
 
-        function updateLips(landmarks) {
-            lipMesh.visible = true;
+        function smooth(landmarks) {
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
@@ -186,17 +203,21 @@
                     smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.85;
                 }
             }
+        }
 
+        function updateLips(landmarks) {
+            lipMesh.visible = true;
+            smooth(landmarks);
             const center = smoothed[13];
             const shape = new THREE.Shape();
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
+                // Micro-escala para não criar aura
                 const x = center.x + (p.x - center.x) * 1.01;
                 const y = center.y + (p.y - center.y) * 1.01;
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
             });
-
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
@@ -204,11 +225,10 @@
                 else hole.lineTo(p.x, 1 - p.y);
             });
             shape.holes = [hole];
-
             if (lipMesh.geometry) lipMesh.geometry.dispose();
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 4);
 
-            // GERAR UVs PARA O NORMAL MAP APARECER
+            // Mapeamento UV preciso para as ranhuras acompanharem a boca
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
             const size = new THREE.Vector3(); bBox.getSize(size);
