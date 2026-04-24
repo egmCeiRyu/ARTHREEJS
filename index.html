@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Lipstick HD - Color CORRECT</title>
+    <title>AR Lipstick HD - Normal Map Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -30,7 +30,6 @@
             border-radius: 30px;
             overflow: hidden;
             border: 1px solid #333;
-            box-shadow: 0 20px 60px rgba(0,0,0,.8);
         }
 
         video, #three_container {
@@ -54,15 +53,6 @@
             backdrop-filter: blur(10px);
         }
 
-        .ui-title {
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 15px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
         .swatches {
             display: flex;
             gap: 15px;
@@ -81,27 +71,12 @@
             .swatch.active {
                 border-color: #fff;
                 transform: scale(1.1);
-                box-shadow: 0 0 15px rgba(255,255,255,.2);
             }
-
-        .slider-container {
-            width: 100%;
-        }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
-            height: 6px;
             cursor: pointer;
-        }
-
-        .labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 10px;
-            color: #666;
-            margin-top: 8px;
-            font-weight: bold;
         }
     </style>
 </head>
@@ -113,7 +88,6 @@
     </div>
 
     <div class="ui-panel">
-        <div class="ui-title">カラーを選択してください</div>
         <div class="swatches">
             <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
             <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
@@ -121,12 +95,10 @@
             <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
             <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
         </div>
-        <div class="slider-container">
-            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.45" oninput="updateOpacity(this.value)">
-            <div class="labels">
-                <span>ナチュラル</span>
-                <span id="int-val">45%</span>
-                <span>ビビッド</span>
+        <div class="slider-container" style="width: 100%;">
+            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.5" oninput="updateOpacity(this.value)">
+            <div style="display:flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 5px;">
+                <span>NATURAL</span><span id="int-val">50%</span><span>VIVID</span>
             </div>
         </div>
     </div>
@@ -143,7 +115,7 @@
         const INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
 
         async function init() {
-            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.googleapis.com/mediapipe-models/face_landmarker/wasm");
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
                 baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
                 runningMode: "VIDEO", numFaces: 1
@@ -155,29 +127,35 @@
 
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(640, 480);
-            renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-            // --- NOVO MATERIAL COM BLENDING CORRETO (Sem o branco) ---
-            // Usamos CustomBlending para misturar a cor diretamente com o vídeo,
-            // preservando a textura natural dos lábios sem cobrir com branco.
-            lipMaterial = new THREE.MeshBasicMaterial({
+            // 1. CARREGAR NORMAL MAP (Textura de ranhuras de pele)
+            const loader = new THREE.TextureLoader();
+            const normalMap = loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg'); // Exemplo de textura rugosa
+            normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+
+            // 2. MATERIAL COM REAÇÃO A LUZ E TEXTURA 3D
+            lipMaterial = new THREE.MeshPhongMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.45,
+                opacity: 0.5,
+                normalMap: normalMap,
+                normalScale: new THREE.Vector2(0.8, 0.8), // Intensidade da textura
+                shininess: 40,
+                specular: 0x222222, // Brilho suave, sem estourar branco
                 side: THREE.DoubleSide,
-                depthWrite: false,
-                blending: THREE.CustomBlending,
-                blendEquation: THREE.AddEquation,
-                blendSrc: THREE.DstAlphaFactor, // Usa a textura do vídeo real
-                blendDst: THREE.OneMinusSrcAlphaFactor
+                depthWrite: false
             });
 
-            // Adicionamos um pouco de suavização nas bordas via geometria
-            lipMaterial.defines = { 'USE_UV': '' };
+            // 3. ILUMINAÇÃO (Obrigatória para ver o Normal Map)
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const pointLight = new THREE.PointLight(0xffffff, 0.6);
+            pointLight.position.set(0.5, 0.5, 1);
+            scene.add(pointLight);
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
+
             startCamera();
         }
 
@@ -189,20 +167,18 @@
         }
 
         function loop() {
-            if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+            if (video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
                 const result = faceLandmarker.detectForVideo(video, performance.now());
                 if (result.faceLandmarks && result.faceLandmarks[0]) {
                     updateLips(result.faceLandmarks[0]);
-                } else {
-                    lipMesh.visible = false;
-                    renderer.render(scene, camera);
                 }
             }
             video.requestVideoFrameCallback(loop);
         }
 
-        function smooth(landmarks) {
+        function updateLips(landmarks) {
+            lipMesh.visible = true;
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
@@ -210,18 +186,17 @@
                     smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.85;
                 }
             }
-        }
 
-        function updateLips(landmarks) {
-            lipMesh.visible = true;
-            smooth(landmarks);
             const center = smoothed[13];
             const shape = new THREE.Shape();
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
-                if (i === 0) shape.moveTo(p.x, 1 - p.y);
-                else shape.lineTo(p.x, 1 - p.y);
+                const x = center.x + (p.x - center.x) * 1.01;
+                const y = center.y + (p.y - center.y) * 1.01;
+                if (i === 0) shape.moveTo(x, 1 - y);
+                else shape.lineTo(x, 1 - y);
             });
+
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
@@ -229,10 +204,21 @@
                 else hole.lineTo(p.x, 1 - p.y);
             });
             shape.holes = [hole];
-            if (lipMesh.geometry) lipMesh.geometry.dispose();
 
-            // Usamos uma ShapeGeometry simples e otimizada
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 12);
+            if (lipMesh.geometry) lipMesh.geometry.dispose();
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 4);
+
+            // GERAR UVs PARA O NORMAL MAP APARECER
+            const pos = lipMesh.geometry.attributes.position;
+            const bBox = new THREE.Box3().setFromBufferAttribute(pos);
+            const size = new THREE.Vector3(); bBox.getSize(size);
+            const uv = new Float32Array(pos.count * 2);
+            for (let i = 0; i < pos.count; i++) {
+                uv[i * 2] = (pos.getX(i) - bBox.min.x) / size.x;
+                uv[i * 2 + 1] = (pos.getY(i) - bBox.min.y) / size.y;
+            }
+            lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+
             renderer.render(scene, camera);
         }
 
@@ -243,7 +229,7 @@
         };
 
         window.updateOpacity = (v) => {
-            lipMaterial.opacity = parseFloat(v);
+            lipMaterial.opacity = v;
             document.getElementById("int-val").innerText = Math.round(v * 100) + "%";
         };
 
