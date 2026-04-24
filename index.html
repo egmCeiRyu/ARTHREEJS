@@ -140,10 +140,8 @@ lipMaterial = new THREE.ShaderMaterial({
                 },
                 vertexShader: `
                     varying vec2 vUv;
-                    varying vec3 vPosition;
                     void main() {
                         vUv = uv;
-                        vPosition = position;
                         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                     }
                 `,
@@ -154,35 +152,33 @@ lipMaterial = new THREE.ShaderMaterial({
 
                     void main() {
                         // 1. MÁSCARA DE BORDA (Feathering suave)
-                        float mask = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x) *
-                                     smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
+                        float mask = smoothstep(0.0, 0.1, vUv.x) * smoothstep(1.0, 0.9, vUv.x) *
+                                     smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
 
-                        // 2. PROFUNDIDADE (Occlusion)
-                        // Escurece levemente o centro horizontal para dar volume 3D
-                        float occ = mix(0.7, 1.0, smoothstep(0.0, 0.4, abs(vUv.y - 0.5)));
+                        // 2. VOLUME 3D (Escurece as bordas e dobras)
+                        float centerShadow = smoothstep(0.0, 0.5, abs(vUv.y - 0.5));
+                        float occ = mix(0.6, 1.0, centerShadow);
 
-                        // 3. GLOSS PRINCIPAL (Centro dos lábios)
-                        // Simula o reflexo de uma ring light ou luz frontal
-                        float gloss1 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.5), 8.0) * 0.6; // Superior
-                        float gloss2 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 3.5), 8.0) * 0.6; // Inferior
+                        // 3. GLOSS ALTA FIDELIDADE (Suave e volumoso)
+                        // Criamos dois pontos de luz ovais (não riscos)
+                        vec2 glossPos1 = vec2(0.5, 0.72); // Brilho no lábio superior
+                        vec2 glossPos2 = vec2(0.5, 0.28); // Brilho no lábio inferior
+                        
+                        // Ajuste de proporção para o brilho ficar oval e não redondo
+                        float dist1 = length((vUv - glossPos1) * vec2(1.0, 2.5));
+                        float dist2 = length((vUv - glossPos2) * vec2(1.0, 2.0));
 
-                        // 4. MICRO-REFLEXOS (Wet Effect)
-                        // Pequenos pontos de luz para parecer textura de gloss molhado
-                        float wet = pow(max(0.0, 1.0 - abs(vUv.y - 0.72) * 10.0), 20.0) * 0.3;
-                        wet += pow(max(0.0, 1.0 - abs(vUv.y - 0.28) * 10.0), 20.0) * 0.3;
+                        float gloss = pow(max(0.0, 1.0 - dist1 * 3.0), 4.0) * 0.5;
+                        gloss += pow(max(0.0, 1.0 - dist2 * 2.5), 3.0) * 0.4;
 
-                        // 5. BRILHO DE BORDA (Fresnel Rim Light)
-                        // Dá aquele reflexo sedoso nas extremidades curvas
-                        float rim = pow(1.0 - mask, 2.0) * 0.15;
+                        // 4. REFLEXO DE BORDA (Fresnel suave)
+                        float rim = pow(1.0 - mask, 3.0) * 0.1;
 
                         // COMPOSIÇÃO FINAL
-                        vec3 baseColor = uColor * occ;
-                        vec3 reflection = vec3(1.0) * (gloss1 + gloss2 + wet + rim);
-                        
-                        // Mistura a cor com os reflexos brancos
-                        vec3 finalColor = baseColor + reflection;
+                        vec3 color = uColor * occ;
+                        color += vec3(0.9, 0.9, 1.0) * (gloss + rim); // Brilho levemente azulado/branco para realismo
 
-                        gl_FragColor = vec4(finalColor, mask * uOpacity);
+                        gl_FragColor = vec4(color, mask * uOpacity);
                     }
                 `
             });
