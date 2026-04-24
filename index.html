@@ -189,13 +189,6 @@
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
 
-                // 1. O PONTO CENTRAL (O "V" profundo) - ID 0
-                if (id === 0) {
-                    // Diminuir este valor (ex: 0.94) empurra o centro para BAIXO,
-                    // criando o 'V' profundo do desenho. Use sY > 1.0 para o efeito oposto.
-                    sY = 0.9; 
-                }
-
                 // LARGURA DA BOCA: Aumente o sX (ex: 1.2) para esticar mais para os lados.
                 let sX = 1.08;
 
