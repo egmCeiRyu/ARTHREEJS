@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Makeup Pro - Ultra Realtime</title>
+    <title>AR Makeup Studio - Fixed & Realtime</title>
     <style>
         :root {
             --accent: #ff4d6d;
@@ -32,7 +32,7 @@
             background: #000;
         }
 
-        /* Otimização de Performance: Hardware Acceleration */
+        /* Camadas de vídeo e render */
         video#input-video {
             position: absolute;
             width: 100%;
@@ -48,7 +48,6 @@
             height: 100%;
             z-index: 2;
             transform: scaleX(-1);
-            image-rendering: pixelated; /* Melhora performance de draw */
         }
 
         .ui-panel {
@@ -84,12 +83,23 @@
             .swatch.active {
                 border-color: white;
                 transform: scale(1.1);
+                box-shadow: 0 0 15px var(--accent);
             }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
             cursor: pointer;
+        }
+
+        .labels {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            font-size: 11px;
+            color: #888;
+            margin-top: 10px;
+            font-weight: bold;
         }
 
         #loading {
@@ -110,7 +120,7 @@
             width: 40px;
             height: 40px;
             border: 3px solid #222;
-            border-top: 3px solid var(--accent);
+            border-top: 4px solid var(--accent);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -131,7 +141,7 @@
     <div id="container">
         <div id="loading">
             <div class="spinner"></div>
-            <p style="margin-top:15px; font-size:12px; color: #666;">SPEED OPTIMIZED ENGINE...</p>
+            <p style="margin-top:15px; font-size:12px; color: #666;">LOADING AR ENGINE...</p>
         </div>
         <video id="input-video" autoplay playsinline></video>
         <canvas id="three-canvas"></canvas>
@@ -147,9 +157,7 @@
         </div>
         <div style="width:100%">
             <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="0.6">
-            <div style="display:flex; justify-content: space-between; width:100%; font-size:10px; margin-top:10px; color:#888;">
-                <span>NATURAL</span><span id="val">60%</span><span>VIVID</span>
-            </div>
+            <div class="labels"><span>NATURAL</span><span id="val">60%</span><span>VIVID</span></div>
         </div>
     </div>
 
@@ -165,7 +173,7 @@
         let scene, camera, renderer, lipsMesh, lipstickMaterial;
         let faceMesh;
 
-        // Índices de contorno reduzidos para processamento ultra-rápido
+        // Índices MediaPipe para contorno e preenchimento
         const LIP_OUTLINE = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291];
         const LIP_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 292, 306, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409];
         const ALL_LIP_INDICES = [...new Set([...LIP_OUTLINE, ...LIP_INNER])];
@@ -174,15 +182,16 @@
             scene = new THREE.Scene();
             camera = new THREE.Camera();
 
-            // Ativação de PowerPreference para usar a GPU dedicada se disponível
             renderer = new THREE.WebGLRenderer({
                 canvas: canvasElement,
                 alpha: true,
-                antialias: false, // Desativar antialias do renderer ajuda no FPS
+                antialias: true,
                 powerPreference: "high-performance"
             });
             renderer.setSize(640, 480);
+            renderer.setPixelRatio(window.devicePixelRatio);
 
+            // Shader customizado para curvas e brilho suave
             lipstickMaterial = new THREE.ShaderMaterial({
                 uniforms: {
                     uColor: { value: new THREE.Color(0xbe1e2d) },
@@ -206,12 +215,13 @@
                     }
                 `,
                 transparent: true,
-                side: THREE.DoubleSide
+                side: THREE.DoubleSide,
+                depthTest: false
             });
 
             const geometry = new THREE.BufferGeometry();
             lipsMesh = new THREE.Mesh(geometry, lipstickMaterial);
-            lipsMesh.frustumCulled = false; // Ganho de performance: não checa se está na tela
+            lipsMesh.visible = false; // Começa invisível para evitar o triângulo no centro
             scene.add(lipsMesh);
         }
 
@@ -219,6 +229,8 @@
             if (loadingElement.style.display !== 'none') loadingElement.style.display = 'none';
 
             if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                lipsMesh.visible = true; // Só mostra se houver rosto
+
                 const landmarks = results.multiFaceLandmarks[0];
                 const positions = new Float32Array(ALL_LIP_INDICES.length * 3);
                 const uvs = new Float32Array(ALL_LIP_INDICES.length * 2);
@@ -242,6 +254,8 @@
                 lipsMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
                 lipsMesh.geometry.setIndex(indices);
                 lipsMesh.geometry.attributes.position.needsUpdate = true;
+            } else {
+                lipsMesh.visible = false; // Esconde se o rosto sair da câmera
             }
             renderer.render(scene, camera);
         }
@@ -249,26 +263,23 @@
         initThree();
 
         faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-
-        // CONFIGURAÇÃO REALTIME:
         faceMesh.setOptions({
             maxNumFaces: 1,
-            refineLandmarks: true,
-            minDetectionConfidence: 0.4, // Menor confiança = Detecção mais rápida
-            minTrackingConfidence: 0.4   // Menor tracking = Menos "atraso" de cálculo
+            refineLandmarks: true, // Crucial para curvas precisas
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
         });
-
         faceMesh.onResults(onResults);
 
         const cameraUtils = new Camera(videoElement, {
             onFrame: async () => {
                 await faceMesh.send({ image: videoElement });
             },
-            width: 480, height: 360 // Reduzir resolução interna da câmera acelera MUITO a IA
+            width: 640, height: 480
         });
         cameraUtils.start();
 
-        // Eventos UI
+        // UI Listeners (Originais)
         const colors = { 'btn-red': 0xbe1e2d, 'btn-pink': 0xff4d6d, 'btn-nude': 0xf28b82, 'btn-dark': 0x4a0e1e, 'btn-black': 0x000000 };
         Object.keys(colors).forEach(id => {
             document.getElementById(id).addEventListener('click', (e) => {
