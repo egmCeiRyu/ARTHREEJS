@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Banuba Style</title>
+    <title>AR Lipstick - Banuba Style Shape</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root { --accent: #ff4d6d; }
@@ -46,35 +46,17 @@
         let smoothed = null;
         let lastVideoTime = -1;
 
-        // ─── LANDMARK IDs ─────────────────────────────────────────────────────────
-        // Lábio superior externo: da comissura esquerda → cupido → comissura direita
-        const UPPER_L  = [61, 185, 40, 39, 37];   // esquerda até pico cupido esq
-        const UPPER_C  = [0];                       // centro do cupido (vale)
-        const UPPER_R  = [267, 269, 270, 409, 291]; // pico cupido dir → comissura dir
+        const INNER_IDS = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
 
-        // Lábio inferior externo
-        const LOWER    = [291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
-
-        // Abertura interna da boca (hole)
-        const INNER    = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308,
-                          324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
-
-        // ─── THREE.JS INIT ─────────────────────────────────────────────────────────
         async function init() {
-            const filesetResolver = await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-            );
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: {
-                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                numFaces: 1
+                baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
+                runningMode: "VIDEO", numFaces: 1
             });
 
-            scene    = new THREE.Scene();
-            camera   = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
+            scene = new THREE.Scene();
+            camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
             camera.position.z = 1;
 
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -83,80 +65,53 @@
 
             lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
-                depthWrite: false,
-                uniforms: {
-                    uColor:   { value: new THREE.Color(0xbe1e2d) },
-                    uOpacity: { value: 0.65 }
-                },
-                vertexShader: `
-                    varying vec2 vUv;
-                    void main() {
-                        vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                    }
-                `,
+                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.65 } },
+                vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
                 fragmentShader: `
-                    uniform vec3  uColor;
-                    uniform float uOpacity;
-                    varying vec2  vUv;
-
+                    uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
                     void main() {
-                        // Máscara suave nas bordas
-                        float mx = smoothstep(0.0, 0.07, vUv.x) * smoothstep(1.0, 0.93, vUv.x);
-                        float my = smoothstep(0.0, 0.10, vUv.y) * smoothstep(1.0, 0.90, vUv.y);
-                        float mask = mx * my;
-
-                        // Micro-sombra nas bordas laterais (depth)
-                        float occ = mix(0.72, 1.0, smoothstep(0.0, 0.35, abs(vUv.y - 0.5)));
-
-                        // Gloss: dois reflexos — lábio superior e inferior
-                        float g1 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.72)) * 4.0), 5.0) * 0.5;
-                        float g2 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 4.0), 5.0) * 0.45;
-                        vec3 gloss = vec3(g1 + g2);
-
-                        gl_FragColor = vec4(uColor * occ + gloss, mask * uOpacity);
+                        float mask = smoothstep(0.0, 0.1, vUv.x) * smoothstep(1.0, 0.9, vUv.x) * smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
+                        float occ = mix(0.7, 1.0, smoothstep(0.0, 0.4, abs(vUv.y - 0.5)));
+                        float upGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.78)) * 3.0), 4.0) * 0.4;
+                        float loGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.22)) * 3.5), 5.0) * 0.4;
+                        vec3 color = uColor * occ + (vec3(0.95, 0.95, 1.0) * (upGloss + loGloss));
+                        gl_FragColor = vec4(color, uOpacity * mask);
                     }
                 `
             });
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
-
             startCamera();
         }
 
-        // ─── CÂMERA ────────────────────────────────────────────────────────────────
         function startCamera() {
-            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } })
-                .then(s => { video.srcObject = s; video.requestVideoFrameCallback(loop); });
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then(s => {
+                video.srcObject = s; video.requestVideoFrameCallback(loop);
+            });
         }
 
         function loop() {
             if (video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
                 const result = faceLandmarker.detectForVideo(video, performance.now());
-                if (result.faceLandmarks?.[0]) updateLips(result.faceLandmarks[0]);
+                if (result.faceLandmarks && result.faceLandmarks[0]) updateLips(result.faceLandmarks[0]);
             }
             video.requestVideoFrameCallback(loop);
         }
 
-        // ─── SMOOTHING ─────────────────────────────────────────────────────────────
-        const ALPHA = 0.75; // 0 = super suave, 1 = sem suavização
-
         function updateLips(landmarks) {
-            if (!smoothed) {
-                smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
-            } else {
+            if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
+            else {
                 for (let i = 0; i < landmarks.length; i++) {
-                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * ALPHA;
-                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * ALPHA;
+                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.75;
+                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.75;
                 }
             }
             drawLips();
         }
 
-        // ─── DESENHO DOS LÁBIOS ────────────────────────────────────────────────────
-       function drawLips() {
+        function drawLips() {
             const center = smoothed[13]; 
 
             const pt = (id, sx = 1.12, sy = 1.0) => {
@@ -167,24 +122,14 @@
                 );
             };
 
-            // --- AJUSTES DE ALTA DEFINIÇÃO (IGUAL À FOTO) ---
             const ptShaped = (id) => {
                 switch (id) {
-                    // Picos do Cupido (37, 267): Deixamos bem altos e definidos
-                    case 37:  return pt(id, 1.10, 0.78); 
-                    case 267: return pt(id, 1.10, 0.78); 
-                    
-                    // Vale do Cupido (0): Empurramos para BAIXO para criar o "V" profundo
-                    case 0:   return pt(id, 1.05, 1.25); 
-
-                    // Asas laterais (39, 40, 269, 270): Baixamos para não subir na pele
-                    case 39:  case 269: return pt(id, 1.12, 0.95);
-                    case 40:  case 270: return pt(id, 1.12, 1.02);
-                    
-                    // Cantos (61, 291): Travados em 1.0 para ficarem pontudos
-                    case 61:  case 291: return pt(id, 1.0, 1.0);
-
-                    // Lábio Inferior: Bem curvado e cheio
+                    case 37:  return pt(id, 1.10, 0.80); 
+                    case 267: return pt(id, 1.10, 0.80); 
+                    case 0:   return pt(id, 1.05, 1.22); 
+                    case 39:  case 269: return pt(id, 1.12, 0.92);
+                    case 40:  case 270: return pt(id, 1.12, 1.00);
+                    case 61:  case 291: return pt(id, 1.0, 1.0); // Cantos pontudos
                     case 17:  return pt(id, 1.12, 1.25);
                     default:  return pt(id, 1.12, 1.0);
                 }
@@ -194,58 +139,45 @@
             const p61 = ptShaped(61);
             shape.moveTo(p61.x, p61.y);
 
-            // --- LADO SUPERIOR ESQUERDO ---
             const p37 = ptShaped(37);
             const p40 = ptShaped(40);
-            // Curva que sai do canto e vai para o pico de forma arqueada
             shape.bezierCurveTo(p61.x, p61.y, p40.x, p40.y - 0.01, p37.x, p37.y);
 
-            // --- O VALE DO CUPIDO (O SEGREDO DA FOTO) ---
             const p0 = ptShaped(0);
             const p267 = ptShaped(267);
-            // Criamos uma descida e subida brusca para o "V" não ficar redondo
             shape.bezierCurveTo(p37.x + 0.01, p37.y + 0.02, p267.x - 0.01, p267.y + 0.02, p0.x, p0.y);
             shape.bezierCurveTo(p0.x, p0.y, p267.x - 0.01, p267.y + 0.02, p267.x, p267.y);
 
-            // --- LADO SUPERIOR DIREITO ---
             const p291 = ptShaped(291);
             const p270 = ptShaped(270);
             shape.bezierCurveTo(p267.x, p267.y, p270.x, p270.y - 0.01, p291.x, p291.y);
 
-            // --- LÁBIO INFERIOR (CONTORNO CHEIO) ---
             const p17 = ptShaped(17);
             shape.bezierCurveTo(p291.x, p291.y + 0.05, p17.x + 0.05, p17.y, p17.x, p17.y);
             shape.bezierCurveTo(p17.x - 0.05, p17.y, p61.x, p61.y + 0.05, p61.x, p61.y);
 
-            // ── Furo interno (dentes / abertura) ──────────────────────────────────
             const hole = new THREE.Path();
-            INNER.forEach((id, i) => {
-                // Hole usa escala menor para não cobrir os dentes
+            INNER_IDS.forEach((id, i) => {
                 const p = pt(id, 1.05, 1.0);
                 i === 0 ? hole.moveTo(p.x, p.y) : hole.lineTo(p.x, p.y);
             });
             shape.holes = [hole];
 
-            // ── Geometry + UV ─────────────────────────────────────────────────────
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 24);
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 32);
 
-            const pos  = lipMesh.geometry.attributes.position;
+            const pos = lipMesh.geometry.attributes.position;
             const bbox = new THREE.Box3().setFromBufferAttribute(pos);
-            const size = new THREE.Vector3();
-            bbox.getSize(size);
-
+            const size = new THREE.Vector3(); bbox.getSize(size);
             const uv = new Float32Array(pos.count * 2);
             for (let i = 0; i < pos.count; i++) {
-                uv[i * 2]     = (pos.getX(i) - bbox.min.x) / size.x;
+                uv[i * 2] = (pos.getX(i) - bbox.min.x) / size.x;
                 uv[i * 2 + 1] = (pos.getY(i) - bbox.min.y) / size.y;
             }
             lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-
             renderer.render(scene, camera);
         }
 
-        // ─── CONTROLES ─────────────────────────────────────────────────────────────
         window.changeColor = (hex, el) => {
             lipMaterial.uniforms.uColor.value.setHex(hex);
             document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
