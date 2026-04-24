@@ -2,11 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ARリップシミュレーター - プレシジョン</title>
-
+    <title>AR Makeup Pro - Precision Fill</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
     <style>
         :root {
             --accent: #ff4d6d;
@@ -41,6 +39,7 @@
             width: 640px;
             height: 480px;
             transform: scaleX(-1);
+            object-fit: cover;
         }
 
         .ui-panel {
@@ -83,12 +82,15 @@
 
             .swatch.active {
                 border-color: white;
-                transform: scale(1.1);
-                box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+                transform: scale(1.15);
+                box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
             }
 
         .slider-container {
             width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         input[type=range] {
@@ -96,6 +98,7 @@
             accent-color: var(--accent);
             cursor: pointer;
             height: 6px;
+            border-radius: 5px;
         }
 
         .labels {
@@ -106,6 +109,7 @@
             color: #666;
             margin-top: 8px;
             font-weight: bold;
+            letter-spacing: 1px;
         }
     </style>
 </head>
@@ -117,7 +121,7 @@
     </div>
 
     <div class="ui-panel">
-        <div class="ui-title">リップカラーを選択</div>
+        <div class="ui-title">リップカラーを選択してください</div>
         <div class="swatches">
             <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
             <div class="swatch" style="background: #8e2a4e;" onclick="changeColor(0x8e2a4e, this)"></div>
@@ -126,10 +130,9 @@
             <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
             <div class="swatch" style="background: #000000;" onclick="changeColor(0x000000, this)"></div>
         </div>
-
         <div class="slider-container">
-            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
-            <div class="labels"><span>ナチュラル</span><span id="int-val">60%</span><span>ビビッド</span></div>
+            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.5" oninput="updateOpacity(this.value)">
+            <div class="labels"><span>ナチュラル</span><span id="int-val">50%</span><span>ビビッド</span></div>
         </div>
     </div>
 
@@ -141,20 +144,24 @@
         let lastVideoTime = -1;
         let smoothedLandmarks = null;
 
-        // --- 高精度アトミック・インデックス (40ポイント) ---
-        // 唇の「山」や口角を完璧に捉えるための詳細なマッピング
-        const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
-        const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+        // --- MAPEAMENTO ANATÔMICO DE ALTA PRECISÃO (40 PONTOS) ---
+        // Esta lista detalhada percorre todos os pontos de contorno superior e inferior,
+        // garantindo que a malha feche e siga cada curva, incluindo o Arco do Cupido.
+        const LIPS_OUTER_FULL = [
+            61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408,
+            270, 269, 267, 0, 37, 39, 40, 185, 61
+        ];
+        // Contorno interno para o recorte da abertura da boca (evita pintar dentes)
+        const LIPS_INNER_FULL = [
+            78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415,
+            310, 311, 312, 13, 82, 81, 80, 191, 78
+        ];
 
         async function init() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: {
-                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                numFaces: 1
+                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
+                runningMode: "VIDEO", numFaces: 1
             });
 
             scene = new THREE.Scene();
@@ -163,18 +170,20 @@
 
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(640, 480);
+            renderer.setPixelRatio(1); // Garante que não sobrecarregue em telas de alta densidade
             document.getElementById('three_container').appendChild(renderer.domElement);
 
+            // O segredo do realismo: Modo de mistura Multiply e transparência
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.6,
-                side: THREE.DoubleSide
+                opacity: 0.5, // 50% de transparência para misturar com os lábios reais
+                side: THREE.DoubleSide,
+                blending: THREE.MultiplyBlending // Faz a cor escurecer os lábios preservando a textura
             });
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
-
             startCamera();
         }
 
@@ -208,30 +217,43 @@
         };
 
         function updateVisuals(landmarks) {
-            // --- プレシジョン・レンダリング・ロジック ---
-            const shape = new THREE.Shape();
+            // 1. Suavização (Reduz o tremor do batom em tempo real)
+            if (!smoothedLandmarks) {
+                smoothedLandmarks = landmarks;
+            } else {
+                smoothedLandmarks = landmarks.map((p, i) => ({
+                    x: (smoothedLandmarks[i].x * 0.75) + (p.x * 0.25),
+                    y: (smoothedLandmarks[i].y * 0.75) + (p.y * 0.25)
+                }));
+            }
 
-            // 外側のライン描画
-            const startOuter = landmarks[LIPS_OUTER[0]];
-            shape.moveTo(startOuter.x, 1 - startOuter.y);
-            LIPS_OUTER.forEach(i => {
-                const p = landmarks[i];
-                shape.lineTo(p.x, 1 - p.y);
+            // 2. Criar Geometria de Alta Precisão (Shape with Hole)
+            const mouthShape = new THREE.Shape();
+
+            // Forma Externa (Contorno total)
+            const startOuter = smoothedLandmarks[LIPS_OUTER_FULL[0]];
+            mouthShape.moveTo(startOuter.x, 1 - startOuter.y);
+            LIPS_OUTER_FULL.forEach(idx => {
+                const p = smoothedLandmarks[idx];
+                mouthShape.lineTo(p.x, 1 - p.y);
             });
 
-            // 内側のライン（穴あけ）
-            const hole = new THREE.Path();
-            const startInner = landmarks[LIPS_INNER[0]];
-            hole.moveTo(startInner.x, 1 - startInner.y);
-            LIPS_INNER.forEach(i => {
-                const p = landmarks[i];
-                hole.lineTo(p.x, 1 - p.y);
+            // Forma Interna (Buraco para os dentes)
+            const holePath = new THREE.Path();
+            const startInner = smoothedLandmarks[LIPS_INNER_FULL[0]];
+            holePath.moveTo(startInner.x, 1 - startInner.y);
+            LIPS_INNER_FULL.forEach(idx => {
+                const p = smoothedLandmarks[idx];
+                holePath.lineTo(p.x, 1 - p.y);
             });
-            shape.holes.push(hole);
 
+            mouthShape.holes.push(holePath);
+
+            // 3. Atualizar a malha do Three.js
             lipMesh.geometry.dispose();
-            // 第2引数の「12」は曲線の解像度。これを増やすことで唇のカーブが滑らかになります
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 12);
+            // Gerar geometria suave a partir da forma detalhada com furos
+            lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 12);
+
             renderer.render(scene, camera);
         }
 
