@@ -2,35 +2,41 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NextGen AR Makeup - MediaPipe Landmarker</title>
+    <title>AR Makeup Studio - Lips Only Precision</title>
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <style>
         :root {
             --accent: #ff4d6d;
+            --bg-dark: #0a0a0a;
+            --panel-bg: rgba(20, 20, 20, 0.95);
         }
 
         body {
             margin: 0;
-            background: #050505;
-            color: white;
+            background: var(--bg-dark);
+            overflow: hidden;
             display: flex;
             flex-direction: column;
             align-items: center;
-            font-family: 'Hiragino Sans', sans-serif;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+            color: white;
         }
 
-        /* ビデオコンテナの配置調整 */
+        /* ビデオコンテナの設定（位置を中央に調整） */
         #container {
             position: relative;
             width: 640px;
             height: 480px;
-            margin-top: 20px;
+            background: #000;
             border-radius: 20px;
             overflow: hidden;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.8);
             border: 2px solid #222;
-            box-shadow: 0 15px 50px rgba(0,0,0,0.7);
         }
 
         video, #three_container {
@@ -38,74 +44,68 @@
             width: 640px;
             height: 480px;
             transform: scaleX(-1);
+            object-fit: cover;
         }
 
         /* UIパネル（カメラの下に配置） */
         .ui-panel {
-            margin-top: 20px;
-            background: rgba(25, 25, 25, 0.95);
+            margin-top: 25px;
+            background: var(--panel-bg);
             padding: 25px;
             border-radius: 25px;
             width: 580px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             border: 1px solid #333;
-            text-align: center;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
         }
 
-        .tab-menu {
+        /* カラー選択タイトル */
+        .ui-title {
+            font-size: 14px;
+            letter-spacing: 2px;
+            color: #aaa;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        /* カラーパレット */
+        .swatches {
             display: flex;
             justify-content: center;
             gap: 15px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
-
-        .tab {
-            padding: 10px 25px;
-            background: #1a1a1a;
-            border-radius: 30px;
-            cursor: pointer;
-            color: #888;
-            font-size: 13px;
-            transition: 0.3s;
-            border: 1px solid #222;
-        }
-
-            .tab.active {
-                background: var(--accent);
-                color: white;
-                border-color: var(--accent);
-                font-weight: bold;
-            }
-
-        .palette {
-            display: none;
-            justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-            .palette.active {
-                display: flex;
-            }
 
         .swatch {
-            width: 38px;
-            height: 38px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             cursor: pointer;
             border: 3px solid transparent;
-            transition: 0.2s;
+            transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
+
+            .swatch:hover {
+                transform: scale(1.1);
+            }
 
             .swatch.active {
                 border-color: white;
-                transform: scale(1.1);
+                transform: scale(1.15);
                 box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
             }
 
+        /* 強度スライダー */
         .slider-container {
             width: 100%;
-            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         input[type=range] {
@@ -113,6 +113,7 @@
             accent-color: var(--accent);
             cursor: pointer;
             height: 6px;
+            border-radius: 5px;
         }
 
         .labels {
@@ -123,6 +124,7 @@
             color: #666;
             margin-top: 8px;
             font-weight: bold;
+            letter-spacing: 1px;
         }
     </style>
 </head>
@@ -134,27 +136,24 @@
     </div>
 
     <div class="ui-panel">
-        <div class="tab-menu">
-            <div id="tab_lips" class="tab active" onclick="switchTab('lips')">リップ (Lábios)</div>
-            <div id="tab_brows" class="tab" onclick="switchTab('brows')">アイブロウ (Sobrancelhas)</div>
-        </div>
+        <div class="ui-title">カラーを選択 (Selecione a Cor)</div>
 
-        <div id="lips_palette" class="palette active">
-            <div class="swatch active" style="background: #be1e2d;" onclick="changeColor('lips', 0xbe1e2d, this)"></div>
-            <div class="swatch" style="background: #ff4d6d;" onclick="changeColor('lips', 0xff4d6d, this)"></div>
-            <div class="swatch" style="background: #4a0e1e;" onclick="changeColor('lips', 0x4a0e1e, this)"></div>
-            <div class="swatch" style="background: #f28b82;" onclick="changeColor('lips', 0xf28b82, this)"></div>
-        </div>
-
-        <div id="brows_palette" class="palette">
-            <div class="swatch active" style="background: #212121;" onclick="changeColor('brows', 0x212121, this)"></div>
-            <div class="swatch" style="background: #3e2723;" onclick="changeColor('brows', 0x3e2723, this)"></div>
-            <div class="swatch" style="background: #4e342e;" onclick="changeColor('brows', 0x4e342e, this)"></div>
+        <div class="swatches">
+            <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
+            <div class="swatch" style="background: #8e2a4e;" onclick="changeColor(0x8e2a4e, this)"></div>
+            <div class="swatch" style="background: #5c162e;" onclick="changeColor(0x5c162e, this)"></div>
+            <div class="swatch" style="background: #f28b82;" onclick="changeColor(0xf28b82, this)"></div>
+            <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
+            <div class="swatch" style="background: #c74375;" onclick="changeColor(0xc74375, this)"></div>
         </div>
 
         <div class="slider-container">
             <input type="range" id="opacitySlider" min="0.1" max="0.9" step="0.01" value="0.4" oninput="updateOpacity(this.value)">
-            <div class="labels"><span>ナチュラル (Natural)</span><span id="int-val">40%</span><span>ビビッド (Vivid)</span></div>
+            <div class="labels">
+                <span>ナチュラル (Natural)</span>
+                <span id="int-val">40%</span>
+                <span>ビビッド (Vivid)</span>
+            </div>
         </div>
     </div>
 
@@ -163,46 +162,38 @@
 
         const video = document.getElementById("webcam");
         let faceLandmarker;
-        let scene, camera, renderer, lipMesh, browMeshL, browMeshR;
-        let lipMat, browMat;
+        let scene, camera, renderer, lipMesh, lipMaterial;
         let lastVideoTime = -1;
+        let smoothedLandmarks = null;
+        let currentRGB = { r: 190, g: 30, b: 45 }; // 初期カラー
 
-        // 精密ランドマーク・インデックス
+        // 精密ランドマークインデックス（LIPS ONLY）
         const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
         const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
-        const BROW_L = [70, 63, 105, 66, 107, 55, 65, 52]; // 細い眉用のポイント
-        const BROW_R = [336, 296, 334, 293, 300, 276, 283, 282];
 
         async function init() {
-            // MediaPipe初期化
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
                 baseOptions: {
                     modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
                     delegate: "GPU"
                 },
-                outputFaceBlendshapes: true,
                 runningMode: "VIDEO",
                 numFaces: 1
             });
 
-            // Three.js初期化
             scene = new THREE.Scene();
             camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
             camera.position.z = 1;
 
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(640, 480);
+            renderer.setPixelRatio(1);
             document.getElementById('three_container').appendChild(renderer.domElement);
 
-            lipMat = new THREE.MeshBasicMaterial({ color: 0xbe1e2d, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
-            browMat = new THREE.MeshBasicMaterial({ color: 0x212121, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
-
-            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMat);
-            browMeshL = new THREE.Mesh(new THREE.BufferGeometry(), browMat);
-            browMeshR = new THREE.Mesh(new THREE.BufferGeometry(), browMat);
-
-            scene.add(lipMesh, browMeshL, browMeshR);
+            lipMaterial = new THREE.MeshBasicMaterial({ color: 0xbe1e2d, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
+            scene.add(lipMesh);
 
             startCamera();
         }
@@ -218,59 +209,70 @@
             if (lastVideoTime !== video.currentTime) {
                 lastVideoTime = video.currentTime;
                 const results = faceLandmarker.detectForVideo(video, performance.now());
-
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    updateVisuals(results.faceLandmarks[0]);
+                    updateLipsVisual(results.faceLandmarks[0]);
                 }
             }
             window.requestAnimationFrame(predictWebcam);
         }
 
-        function updateVisuals(landmarks) {
-            const createGeo = (outer, inner = null) => {
-                const shape = new THREE.Shape();
-                shape.moveTo(landmarks[outer[0]].x, 1 - landmarks[outer[0]].y);
-                outer.forEach(i => shape.lineTo(landmarks[i].x, 1 - landmarks[i].y));
-                if (inner) {
-                    const hole = new THREE.Path();
-                    hole.moveTo(landmarks[inner[0]].x, 1 - landmarks[inner[0]].y);
-                    inner.forEach(i => hole.lineTo(landmarks[i].x, 1 - landmarks[i].y));
-                    shape.holes.push(hole);
-                }
-                return new THREE.ShapeGeometry(shape);
-            };
+        // カラー変更機能（明るさ検出付き）
+        window.changeColor = (hex, el) => {
+            // currentRGBを更新
+            currentRGB.r = (hex >> 16) & 0xFF;
+            currentRGB.g = (hex >> 8) & 0xFF;
+            currentRGB.b = hex & 0xFF;
 
-            lipMesh.geometry.dispose();
-            lipMesh.geometry = createGeo(LIPS_OUTER, LIPS_INNER);
-
-            browMeshL.geometry.dispose();
-            browMeshL.geometry = createGeo(BROW_L);
-
-            browMeshR.geometry.dispose();
-            browMeshR.geometry = createGeo(BROW_R);
-
-            renderer.render(scene, camera);
-        }
-
-        // UI用グローバル関数
-        window.switchTab = (type) => {
-            document.querySelectorAll('.tab, .palette').forEach(el => el.classList.remove('active'));
-            document.getElementById(`tab_${type}`).classList.add('active');
-            document.getElementById(`${type}_palette`).classList.add('active');
-        };
-
-        window.changeColor = (type, hex, el) => {
-            const mat = type === 'lips' ? lipMat : browMat;
-            mat.color.setHex(hex);
-            el.parentElement.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+            lipMaterial.color.setHex(hex);
+            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
             el.classList.add('active');
         };
 
         window.updateOpacity = (val) => {
-            lipMat.opacity = val;
-            browMat.opacity = val * 0.7; // 眉毛は自然に見せるため少し薄く
+            lipMaterial.opacity = val;
             document.getElementById('int-val').innerText = Math.round(val * 100) + "%";
         };
+
+        function updateLipsVisual(landmarks) {
+            // --- 1. スムージング処理 ---
+            if (!smoothedLandmarks) smoothedLandmarks = JSON.parse(JSON.stringify(landmarks));
+            else {
+                for (let i = 0; i < landmarks.length; i++) {
+                    smoothedLandmarks[i].x = smoothedLandmarks[i].x * 0.4 + landmarks[i].x * 0.6;
+                    smoothedLandmarks[i].y = smoothedLandmarks[i].y * 0.4 + landmarks[i].y * 0.6;
+                }
+            }
+
+            // --- 2. 明るさ検出による描画モードの変更 ---
+            const luminance = (currentRGB.r * 0.299) + (currentRGB.g * 0.587) + (currentRGB.b * 0.114);
+
+            // --- 3. 精密ジオメトリ生成 (穴あけ処理付き) ---
+            const mouthShape = new THREE.Shape();
+            mouthShape.moveTo(smoothedLandmarks[LIPS_OUTER[0]].x, 1 - smoothedLandmarks[LIPS_OUTER[0]].y);
+            LIPS_OUTER.forEach(i => mouthShape.lineTo(smoothedLandmarks[i].x, 1 - smoothedLandmarks[i].y));
+
+            const holePath = new THREE.Path();
+            holePath.moveTo(smoothedLandmarks[LIPS_INNER[0]].x, 1 - smoothedLandmarks[LIPS_INNER[0]].y);
+            LIPS_INNER.forEach(i => holePath.lineTo(smoothedLandmarks[i].x, 1 - smoothedLandmarks[i].y));
+            mouthShape.holes.push(holePath);
+
+            lipMesh.geometry.dispose();
+
+            if (luminance > 160) {
+                // 明るい色：SourceOverモード（カバー力重視、少し不透明度を上げる）
+                lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 12);
+                lipMaterial.blending = THREE.NoBlending; // カバー力アップ
+            } else {
+                // 暗い色：Multiplyモード（自然な透け感、デフォルト）
+                lipMesh.geometry = new THREE.ShapeGeometry(mouthShape);
+                lipMaterial.blending = THREE.CustomBlending;
+                lipMaterial.blendEquation = THREE.AddEquation;
+                lipMaterial.blendSrc = THREE.DstColorFactor;
+                lipMaterial.blendDst = THREE.ZeroFactor;
+            }
+
+            renderer.render(scene, camera);
+        }
 
         init();
     </script>
