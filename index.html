@@ -194,9 +194,14 @@
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: .45,
+                opacity: 0.45,
                 side: THREE.DoubleSide,
-                blending: THREE.MultiplyBlending
+                depthWrite: false,
+
+                blending: THREE.CustomBlending,
+                blendEquation: THREE.AddEquation,
+                blendSrc: THREE.SrcAlphaFactor,
+                blendDst: THREE.OneMinusSrcAlphaFactor
             });
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
