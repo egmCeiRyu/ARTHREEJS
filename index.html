@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Mesh Fix</title>
+    <title>AR Lipstick - Mesh & Normals Fix</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root { --accent: #ff4d6d; }
@@ -43,12 +43,10 @@
         let smoothed = null;
         let lastVideoTime = -1;
 
-        // MAPA DE MALHA (O shape volta aqui, conectando os pontos externos aos internos)
+        // Mapeamento de triângulos corrigido (Sentido Anti-horário para normals corretas)
         const MESH_MAP = [
-            [61, 185, 78], [185, 40, 191], [40, 39, 80], [39, 37, 81], [37, 0, 82], [0, 267, 13],
-            [267, 269, 312], [269, 270, 311], [270, 409, 310], [409, 291, 415], [291, 308, 415],
-            [291, 375, 308], [375, 321, 324], [321, 405, 318], [405, 314, 402], [314, 17, 317],
-            [17, 84, 14], [84, 181, 87], [181, 91, 178], [91, 146, 88], [146, 61, 95], [61, 78, 95]
+            [61, 78, 185], [185, 78, 191], [185, 191, 40], [40, 191, 80], [40, 80, 39], [39, 80, 81], [39, 81, 37], [37, 81, 82], [37, 82, 0], [0, 82, 13], [0, 13, 267], [267, 13, 312], [267, 312, 269], [269, 312, 311], [269, 311, 270], [270, 311, 310], [270, 310, 409], [409, 310, 415], [409, 415, 291], [291, 415, 308],
+            [291, 308, 375], [375, 308, 324], [375, 324, 321], [321, 324, 318], [321, 318, 405], [405, 318, 402], [405, 402, 314], [314, 402, 317], [314, 317, 17], [17, 317, 14], [17, 14, 84], [84, 14, 87], [84, 87, 181], [181, 87, 178], [181, 178, 91], [91, 178, 88], [91, 88, 146], [146, 88, 95], [146, 95, 61], [61, 95, 78]
         ];
 
         async function init() {
@@ -66,21 +64,26 @@
             renderer.setSize(640, 480);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-            // MANTIDO: Seu Shader e UI
             lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
-                side: THREE.DoubleSide,
+                side: THREE.DoubleSide, // Garante visibilidade mesmo se houver inversão
                 uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.65 } },
-                vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
                 fragmentShader: `
                     uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
                     void main() {
-                        float mask = smoothstep(0.0, 0.1, vUv.x) * smoothstep(1.0, 0.9, vUv.x) * smoothstep(0.0, 0.1, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
+                        // Máscara UV corrigida para a malha complexa
+                        float mask = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.85, vUv.x);
                         float occ = mix(0.7, 1.0, smoothstep(0.0, 0.4, abs(vUv.y - 0.5)));
-                        float upGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.78)) * 3.0), 4.0) * 0.4;
-                        float loGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.22)) * 3.5), 5.0) * 0.4;
-                        vec3 color = uColor * occ + (vec3(0.95, 0.95, 1.0) * (upGloss + loGloss));
-                        gl_FragColor = vec4(color, uOpacity * mask);
+                        float g1 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.0), 5.0) * 0.4;
+                        float g2 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 3.0), 5.0) * 0.4;
+                        gl_FragColor = vec4(uColor * occ + vec3(g1 + g2), uOpacity * mask);
                     }
                 `
             });
@@ -100,7 +103,7 @@
             if (video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
                 const result = faceLandmarker.detectForVideo(video, performance.now());
-                if (result.faceLandmarks && result.faceLandmarks[0]) updateLips(result.faceLandmarks[0]);
+                if (result.faceLandmarks?.[0]) updateLips(result.faceLandmarks[0]);
             }
             video.requestVideoFrameCallback(loop);
         }
@@ -117,7 +120,6 @@
             const vertices = new Float32Array(MESH_MAP.length * 3 * 3);
             const uvs = new Float32Array(MESH_MAP.length * 3 * 2);
 
-            // Reconstruindo o Shape através da Malha
             MESH_MAP.forEach((tri, i) => {
                 tri.forEach((id, j) => {
                     const p = smoothed[id];
@@ -126,14 +128,18 @@
                     vertices[idx * 3 + 1] = 1 - p.y;
                     vertices[idx * 3 + 2] = 0;
 
-                    // UV mapping baseado na posição relativa para o shader funcionar
-                    uvs[idx * 2] = (p.x - smoothed[61].x) / (smoothed[291].x - smoothed[61].x);
-                    uvs[idx * 2 + 1] = ( (1-p.y) - (1-smoothed[17].y) ) / ( (1-smoothed[0].y) - (1-smoothed[17].y) );
+                    // UV mapping normalizado
+                    uvs[idx * 2] = (p.x - smoothed[61].x) / (smoothed[291].x - smoothed[61].x + 0.001);
+                    uvs[idx * 2 + 1] = (p.y - smoothed[37].y) / (smoothed[17].y - smoothed[37].y + 0.001);
                 });
             });
 
             lipMesh.geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
             lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+            
+            // ESSENCIAL: Recalcula as normais para o shader e luzes
+            lipMesh.geometry.computeVertexNormals();
+            
             lipMesh.geometry.attributes.position.needsUpdate = true;
             lipMesh.geometry.attributes.uv.needsUpdate = true;
 
