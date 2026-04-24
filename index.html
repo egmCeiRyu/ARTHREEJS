@@ -1,100 +1,220 @@
-<script type="module">
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>AR Lipstick Banuba Pro</title>
 
-    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js";
-    import { FaceLandmarker, FilesetResolver }
-    from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
+    <style>
+        :root {
+            --accent: #ff4d6d;
+        }
 
-    const video = document.getElementById("webcam");
+        body {
+            margin: 0;
+            background: #050505;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: sans-serif;
+            color: #fff;
+        }
 
-    let faceLandmarker;
-    let scene, camera, renderer;
-    let lipMesh, lipMaterial;
-    let smoothed = null;
-    let lastVideoTime = -1;
+        #container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 30px;
+            overflow: hidden;
+            border: 1px solid #333;
+            box-shadow: 0 20px 60px rgba(0,0,0,.8);
+        }
 
-    /* BANUBA STYLE TRACKING */
-    const OUTER = [
-        61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
-        409, 270, 269, 267, 0, 37, 39, 40, 185, 61
-    ];
+        video, #three_container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            transform: scaleX(-1);
+            object-fit: cover;
+        }
 
-    const INNER = [
-        78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
-        415, 310, 311, 312, 13, 82, 81, 80, 191, 78
-    ];
+        .ui-panel {
+            margin-top: 25px;
+            background: rgba(20,20,20,.95);
+            padding: 20px;
+            border-radius: 25px;
+            width: 550px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid #444;
+            backdrop-filter: blur(10px);
+        }
 
-    async function init() {
+        .swatches {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
 
-        const filesetResolver =
-            await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-            );
+        .swatch {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: .2s;
+        }
 
-        faceLandmarker =
-            await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: {
-                    modelAssetPath:
-                        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                numFaces: 1
-            });
+            .swatch.active {
+                border-color: #fff;
+                transform: scale(1.1);
+            }
 
-        scene = new THREE.Scene();
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+    </style>
+</head>
 
-        camera =
-            new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
+<body>
 
-        camera.position.z = 1;
+    <div id="container">
+        <video id="webcam" autoplay playsinline muted></video>
+        <div id="three_container"></div>
+    </div>
 
-        renderer =
-            new THREE.WebGLRenderer({
-                alpha: true,
-                antialias: true
-            });
+    <div class="ui-panel">
 
-        renderer.setSize(640, 480);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        <div class="swatches">
+            <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
+            <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
+            <div class="swatch" style="background:#f28b82" onclick="changeColor(0xf28b82,this)"></div>
+            <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
+            <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
+        </div>
 
-        document
-            .getElementById("three_container")
-            .appendChild(renderer.domElement);
+        <div style="width:100%;">
+            <input type="range"
+                   id="opacitySlider"
+                   min="0.1"
+                   max="1"
+                   step="0.01"
+                   value="0.58"
+                   oninput="updateOpacity(this.value)">
 
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:6px;">
+                <span>NATURAL</span>
+                <span id="int-val">58%</span>
+                <span>VIVID</span>
+            </div>
+        </div>
 
-        /* =====================================
-        BANUBA SHADER PRO
-        ===================================== */
+    </div>
 
-        lipMaterial = new THREE.ShaderMaterial({
+    <script type="module">
 
-            transparent: true,
-            side: THREE.DoubleSide,
-            depthWrite: false,
+        import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js";
 
-            uniforms: {
-                uColor: { value: new THREE.Color(0xbe1e2d) },
-                uOpacity: { value: 0.58 }
-            },
+        import {
+            FaceLandmarker,
+            FilesetResolver
+        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
 
-            vertexShader: `
+        window.addEventListener("DOMContentLoaded", () => {
+
+            const video = document.getElementById("webcam");
+            const container3d = document.getElementById("three_container");
+
+            let faceLandmarker;
+            let scene, camera, renderer;
+            let lipMesh, lipMaterial;
+            let smoothed = null;
+            let lastVideoTime = -1;
+
+            const OUTER = [
+                61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
+                409, 270, 269, 267, 0, 37, 39, 40, 185, 61
+            ];
+
+            const INNER = [
+                78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
+                415, 310, 311, 312, 13, 82, 81, 80, 191, 78
+            ];
+
+            init();
+
+            async function init() {
+
+                const filesetResolver =
+                    await FilesetResolver.forVisionTasks(
+                        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+                    );
+
+                faceLandmarker =
+                    await FaceLandmarker.createFromOptions(filesetResolver, {
+                        baseOptions: {
+                            modelAssetPath:
+                                "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                            delegate: "GPU"
+                        },
+                        runningMode: "VIDEO",
+                        numFaces: 1
+                    });
+
+                scene = new THREE.Scene();
+
+                camera =
+                    new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
+
+                camera.position.z = 1;
+
+                renderer =
+                    new THREE.WebGLRenderer({
+                        alpha: true,
+                        antialias: true
+                    });
+
+                renderer.setSize(640, 480);
+                renderer.setPixelRatio(window.devicePixelRatio);
+
+                container3d.appendChild(renderer.domElement);
+
+                /* BANUBA PRO SHADER */
+
+                lipMaterial =
+                    new THREE.ShaderMaterial({
+
+                        transparent: true,
+                        side: THREE.DoubleSide,
+                        depthWrite: false,
+
+                        uniforms: {
+                            uColor: { value: new THREE.Color(0xbe1e2d) },
+                            uOpacity: { value: 0.58 }
+                        },
+
+                        vertexShader: `
 
 varying vec2 vUv;
 
 void main(){
-
 vUv = uv;
-
 gl_Position =
 projectionMatrix *
 modelViewMatrix *
 vec4(position,1.0);
-
 }
-
 `,
 
-            fragmentShader: `
+                        fragmentShader: `
 
 uniform vec3 uColor;
 uniform float uOpacity;
@@ -102,8 +222,6 @@ uniform float uOpacity;
 varying vec2 vUv;
 
 void main(){
-
-/* ---------- SHAPE MASK ---------- */
 
 float edgeX =
 smoothstep(0.0,0.05,vUv.x) *
@@ -115,295 +233,240 @@ smoothstep(0.0,0.10,1.0-vUv.y);
 
 float alpha = edgeX * edgeY;
 
-/* ---------- INNER DARK CAVITY ---------- */
+/* cavity */
+float cx =
+1.0 - abs(vUv.x-0.5)*2.0;
 
-float centerDarkX =
-1.0 - abs(vUv.x - 0.5) * 2.0;
+float cy =
+1.0 - abs(vUv.y-0.5)*2.0;
 
-float centerDarkY =
-1.0 - abs(vUv.y - 0.5) * 2.0;
+cx = pow(cx,1.2);
+cy = pow(cy,2.0);
 
-centerDarkX = pow(centerDarkX,1.2);
-centerDarkY = pow(centerDarkY,2.0);
+float cavity = cx * cy * 0.55;
 
-float cavity =
-centerDarkX * centerDarkY * 0.55;
-
-/* ---------- LOWER LIP VOLUME ---------- */
-
+/* lower lip light */
 float lower =
-smoothstep(0.40,0.90,vUv.y);
+smoothstep(0.42,0.92,vUv.y);
 
-float lowerVolume =
-pow(lower,1.7) * 0.16;
+float lowerVol =
+pow(lower,1.8) * 0.14;
 
-/* ---------- UPPER LIP SHADOW ---------- */
-
+/* upper lip shadow */
 float upper =
 1.0 - smoothstep(0.0,0.42,vUv.y);
 
 float upperShadow =
-upper * 0.10;
+upper * 0.12;
 
-/* ---------- GLOSS CENTRAL ---------- */
+/* gloss */
+float gx =
+1.0 - abs(vUv.x-0.5)*2.0;
 
-float glossX =
-1.0 - abs(vUv.x - 0.5) * 2.0;
+float gy =
+1.0 - abs(vUv.y-0.62)*3.0;
 
-float glossY =
-1.0 - abs(vUv.y - 0.62) * 3.0;
-
-glossX = pow(glossX,3.0);
-glossY = max(glossY,0.0);
-glossY = pow(glossY,2.0);
+gx = pow(gx,3.0);
+gy = max(gy,0.0);
+gy = pow(gy,2.0);
 
 float gloss =
-glossX * glossY * 0.55;
-
-/* ---------- TOP SHINE ---------- */
-
-float topLine =
-smoothstep(0.58,0.78,vUv.y) *
-(1.0 - abs(vUv.x - 0.5) * 1.6);
-
-topLine *= 0.14;
-
-/* ---------- COLOR BUILD ---------- */
+gx * gy * 0.58;
 
 vec3 col = uColor;
 
-/* cavity dark */
 col *= (1.0 - cavity);
-
-/* lower volume light */
-col += vec3(lowerVolume);
-
-/* upper shadow */
+col += vec3(lowerVol);
 col *= (1.0 - upperShadow);
-
-/* gloss */
 col += vec3(gloss);
 
-/* top line shine */
-col += vec3(topLine);
-
-/* slight saturation */
-col.r *= 1.08;
-
-/* final */
 gl_FragColor =
-vec4(col, alpha * uOpacity);
+vec4(col,alpha*uOpacity);
 
 }
-
 `
+                    });
 
-        });
+                lipMesh =
+                    new THREE.Mesh(
+                        new THREE.BufferGeometry(),
+                        lipMaterial
+                    );
 
-        lipMesh =
-            new THREE.Mesh(
-                new THREE.BufferGeometry(),
-                lipMaterial
-            );
+                scene.add(lipMesh);
 
-        scene.add(lipMesh);
-
-        startCamera();
-    }
-
-    /* =====================================
-    CAMERA
-    ===================================== */
-
-    function startCamera() {
-
-        navigator.mediaDevices.getUserMedia({
-            video: {
-                width: 640,
-                height: 480,
-                frameRate: { ideal: 60, max: 60 }
+                startCamera();
             }
-        }).then(stream => {
 
-            video.srcObject = stream;
-            video.requestVideoFrameCallback(loop);
+            function startCamera() {
 
-        });
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: 640,
+                        height: 480,
+                        frameRate: { ideal: 60, max: 60 }
+                    }
+                }).then(stream => {
 
-    }
+                    video.srcObject = stream;
+                    video.requestVideoFrameCallback(loop);
 
-    /* =====================================
-    LOOP
-    ===================================== */
+                });
+            }
 
-    function loop() {
+            function loop() {
 
-        if (video.currentTime !== lastVideoTime) {
+                if (video.currentTime !== lastVideoTime) {
 
-            lastVideoTime = video.currentTime;
+                    lastVideoTime = video.currentTime;
 
-            const result =
-                faceLandmarker.detectForVideo(
-                    video,
-                    performance.now()
+                    const result =
+                        faceLandmarker.detectForVideo(
+                            video,
+                            performance.now()
+                        );
+
+                    if (result.faceLandmarks &&
+                        result.faceLandmarks[0]) {
+
+                        updateLips(result.faceLandmarks[0]);
+
+                    }
+                }
+
+                video.requestVideoFrameCallback(loop);
+            }
+
+            function smooth(landmarks) {
+
+                if (!smoothed) {
+
+                    smoothed =
+                        landmarks.map(p => ({
+                            x: p.x,
+                            y: p.y
+                        }));
+
+                    return;
+                }
+
+                for (let i = 0; i < landmarks.length; i++) {
+
+                    smoothed[i].x +=
+                        (landmarks[i].x - smoothed[i].x) * 0.92;
+
+                    smoothed[i].y +=
+                        (landmarks[i].y - smoothed[i].y) * 0.92;
+                }
+            }
+
+            function updateLips(landmarks) {
+
+                lipMesh.visible = true;
+
+                smooth(landmarks);
+
+                const center = smoothed[13];
+
+                const scaleX = 1.13;
+                const scaleY = 1.10;
+
+                function fit(p) {
+
+                    return {
+                        x: center.x + (p.x - center.x) * scaleX,
+                        y: center.y + (p.y - center.y) * scaleY
+                    };
+                }
+
+                const shape = new THREE.Shape();
+
+                OUTER.forEach((id, i) => {
+
+                    const p = fit(smoothed[id]);
+
+                    if (i === 0) shape.moveTo(p.x, 1 - p.y);
+                    else shape.lineTo(p.x, 1 - p.y);
+
+                });
+
+                const hole = new THREE.Path();
+
+                INNER.forEach((id, i) => {
+
+                    const p = fit(smoothed[id]);
+
+                    if (i === 0) hole.moveTo(p.x, 1 - p.y);
+                    else hole.lineTo(p.x, 1 - p.y);
+
+                });
+
+                shape.holes = [hole];
+
+                if (lipMesh.geometry)
+                    lipMesh.geometry.dispose();
+
+                lipMesh.geometry =
+                    new THREE.ShapeGeometry(shape, 4);
+
+                /* UV */
+
+                const pos =
+                    lipMesh.geometry.attributes.position;
+
+                const box =
+                    new THREE.Box3()
+                        .setFromBufferAttribute(pos);
+
+                const size = new THREE.Vector3();
+                box.getSize(size);
+
+                const uv =
+                    new Float32Array(pos.count * 2);
+
+                for (let i = 0; i < pos.count; i++) {
+
+                    uv[i * 2] =
+                        (pos.getX(i) - box.min.x) / size.x;
+
+                    uv[i * 2 + 1] =
+                        (pos.getY(i) - box.min.y) / size.y;
+                }
+
+                lipMesh.geometry.setAttribute(
+                    "uv",
+                    new THREE.BufferAttribute(uv, 2)
                 );
 
-            if (result.faceLandmarks &&
-                result.faceLandmarks[0]) {
-
-                updateLips(result.faceLandmarks[0]);
-
+                renderer.render(scene, camera);
             }
-        }
 
-        video.requestVideoFrameCallback(loop);
-    }
+            /* UI */
 
-    /* =====================================
-    SMOOTH
-    ===================================== */
+            window.changeColor = (hex, el) => {
 
-    function smooth(landmarks) {
+                lipMaterial.uniforms.uColor.value.setHex(hex);
 
-        if (!smoothed) {
+                document
+                    .querySelectorAll(".swatch")
+                    .forEach(s => s.classList.remove("active"));
 
-            smoothed =
-                landmarks.map(p => ({
-                    x: p.x,
-                    y: p.y
-                }));
-
-            return;
-        }
-
-        for (let i = 0; i < landmarks.length; i++) {
-
-            smoothed[i].x +=
-                (landmarks[i].x - smoothed[i].x) * 0.92;
-
-            smoothed[i].y +=
-                (landmarks[i].y - smoothed[i].y) * 0.92;
-
-        }
-    }
-
-    /* =====================================
-    UPDATE LIPS
-    ===================================== */
-
-    function updateLips(landmarks) {
-
-        lipMesh.visible = true;
-
-        smooth(landmarks);
-
-        const center = smoothed[13];
-
-        const scaleX = 1.13;
-        const scaleY = 1.10;
-
-        function fit(p) {
-
-            return {
-                x: center.x + (p.x - center.x) * scaleX,
-                y: center.y + (p.y - center.y) * scaleY
+                el.classList.add("active");
             };
 
-        }
+            window.updateOpacity = (v) => {
 
-        const shape = new THREE.Shape();
+                lipMaterial.uniforms.uOpacity.value =
+                    parseFloat(v);
 
-        OUTER.forEach((id, i) => {
-
-            const p = fit(smoothed[id]);
-
-            if (i === 0)
-                shape.moveTo(p.x, 1 - p.y);
-            else
-                shape.lineTo(p.x, 1 - p.y);
+                document.getElementById("int-val")
+                    .innerText =
+                    Math.round(v * 100) + "%";
+            };
 
         });
 
-        const hole = new THREE.Path();
+    </script>
 
-        INNER.forEach((id, i) => {
-
-            const p = fit(smoothed[id]);
-
-            if (i === 0)
-                hole.moveTo(p.x, 1 - p.y);
-            else
-                hole.lineTo(p.x, 1 - p.y);
-
-        });
-
-        shape.holes = [hole];
-
-        if (lipMesh.geometry)
-            lipMesh.geometry.dispose();
-
-        lipMesh.geometry =
-            new THREE.ShapeGeometry(shape, 4);
-
-        /* UV FIX */
-
-        const pos =
-            lipMesh.geometry.attributes.position;
-
-        const box =
-            new THREE.Box3()
-                .setFromBufferAttribute(pos);
-
-        const size = new THREE.Vector3();
-        box.getSize(size);
-
-        const uv =
-            new Float32Array(pos.count * 2);
-
-        for (let i = 0; i < pos.count; i++) {
-
-            uv[i * 2] =
-                (pos.getX(i) - box.min.x) / size.x;
-
-            uv[i * 2 + 1] =
-                (pos.getY(i) - box.min.y) / size.y;
-        }
-
-        lipMesh.geometry.setAttribute(
-            "uv",
-            new THREE.BufferAttribute(uv, 2)
-        );
-
-        renderer.render(scene, camera);
-    }
-
-    /* =====================================
-    UI
-    ===================================== */
-
-    window.changeColor = (hex, el) => {
-
-        lipMaterial.uniforms.uColor.value
-            .setHex(hex);
-
-        document
-            .querySelectorAll(".swatch")
-            .forEach(s => s.classList.remove("active"));
-
-        el.classList.add("active");
-    };
-
-    window.updateOpacity = (v) => {
-
-        lipMaterial.uniforms.uOpacity.value =
-            parseFloat(v);
-
-        document.getElementById("int-val")
-            .innerText =
-            Math.round(v * 100) + "%";
-
-    };
-
-    init();
-
-</script>
+</body>
+</html>
