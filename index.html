@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Angel Wing Convex Shape</title>
+    <title>AR Lipstick Pro - Final Version</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -98,10 +98,10 @@
             <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
             <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
         </div>
-        <div class="slider-container" style="width: 100%;">
-            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
-            <div style="display:flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 5px;">
-                <span>NATURAL</span><span id="int-val">60%</span><span>VIVID</span>
+        <div style="width: 100%;">
+            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.58" oninput="updateOpacity(this.value)">
+            <div style="display:flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 8px;">
+                <span>NATURAL</span><span id="int-val">58%</span><span>VIVID</span>
             </div>
         </div>
     </div>
@@ -134,15 +134,16 @@
 
             lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
-                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.6 } },
+                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.58 } },
                 vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
                 fragmentShader: `
                         uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
                         void main() {
-                            float mask = smoothstep(0.0, 0.05, vUv.x) * smoothstep(1.0, 0.95, vUv.x) * smoothstep(0.0, 0.1, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
-                            float occlusion = mix(0.65, 1.0, smoothstep(0.0, 0.45, abs(vUv.y - 0.5)));
-                            float gloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.5)) * 2.2), 6.0) * 0.35;
-                            gl_FragColor = vec4(uColor * occlusion + vec3(gloss), mask * uOpacity);
+                            float mask = smoothstep(0.0, 0.05, vUv.x) * smoothstep(1.0, 0.95, vUv.x) * smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
+                            float occlusion = mix(0.75, 1.0, smoothstep(0.0, 0.45, abs(vUv.y - 0.5)));
+                            float gloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.5)) * 2.5), 5.0) * 0.22;
+                            vec3 finalColor = (uColor * occlusion) + vec3(gloss);
+                            gl_FragColor = vec4(finalColor, uOpacity * mask);
                         }
                     `
             });
@@ -181,71 +182,38 @@
             const center = smoothed[13];
             const shape = new THREE.Shape();
 
-            // --- AJUSTE CONVEXO "ANJO" ---
-            // Aumentamos o scaleX (horizontal) para 1.15.
-            // No scaleY, aplicamos um fator que empurra o topo para CIMA (convexo)
+            // --- AJUSTE EXTERNO (OUTER) ---
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
-                let sY = 0.8;
+                let sY = 1.02; // Escala vertical padrão
+                let sX = 1.15; // Esticamento horizontal para os cantos
 
-                // Pontos do Arco do Cupido (37, 0, 267)
-                // Aumentamos a escala vertical para esses pontos específicos para criar a convexidade
-                if (id === 37 || id === 0 || id === 267) sY =1.01;
+                // Ajustes finos de curvatura que você pediu
+                if (id === 37 || id === 0 || id === 267) sY = 1.0; // Arco do Cupido no limite natural
+                if (id === 17) sY = 1.0; // Lábio inferior no limite natural
 
-                const x = center.x + (p.x - center.x) * 1.10;
+                const x = center.x + (p.x - center.x) * sX;
                 const y = center.y + (p.y - center.y) * sY;
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
             });
 
-            function updateLips(landmarks) {
-                lipMesh.visible = true;
-                if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
-                else {
-                    for (let i = 0; i < landmarks.length; i++) {
-                        smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.85;
-                        smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.85;
-                    }
-                }
+            // --- AJUSTE INTERNO (INNER) - FIX PARA NÃO PINTAR OS DENTES ---
+            const hole = new THREE.Path();
+            INNER.forEach((id, i) => {
+                const p = smoothed[id];
+                let sY_inner = 1.05; // Furo maior verticalmente para limpar dentes
+                let sX_inner = 1.15; // Acompanha o esticamento horizontal
 
-                const center = smoothed[13];
-                const shape = new THREE.Shape();
-
-                // --- CONTROLE DA BORDA EXTERNA (OUTER) ---
-                OUTER.forEach((id, i) => {
-                    const p = smoothed[id];
-                    let sY = 1.02; // Padrão
-                    let sX = 1.15; // Esticamento horizontal (que você gostou)
-
-                    if (id === 37 || id === 0 || id === 267) sY = 1.0; // Arco do Cupido (Natural)
-                    if (id === 17) sY = 1.0; // Base inferior (Natural)
-
-                    const x = center.x + (p.x - center.x) * sX;
-                    const y = center.y + (p.y - center.y) * sY;
-                    if (i === 0) shape.moveTo(x, 1 - y);
-                    else shape.lineTo(x, 1 - y);
-                });
-
-                // --- CONTROLE DO FURO INTERNO (INNER) ---
-                const hole = new THREE.Path();
-                INNER.forEach((id, i) => {
-                    const p = smoothed[id];
-
-                    // DICA: O scale do INNER deve ser sempre levemente MAIOR ou IGUAL ao do OUTER
-                    // para "esticar" o buraco e não deixar a cor entrar na boca.
-                    let sY_inner = 1.05;
-                    let sX_inner = 1.15;
-
-                    const x = center.x + (p.x - center.x) * sX_inner;
-                    const y = center.y + (p.y - center.y) * sY_inner;
-
-                    if (i === 0) hole.moveTo(x, 1 - y);
-                    else hole.lineTo(x, 1 - y);
-                });
-                shape.holes = [hole];
+                const x = center.x + (p.x - center.x) * sX_inner;
+                const y = center.y + (p.y - center.y) * sY_inner;
+                if (i === 0) hole.moveTo(x, 1 - y);
+                else hole.lineTo(x, 1 - y);
+            });
+            shape.holes = [hole];
 
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 8);
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 8); // Subdivisões altas para suavidade
 
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
@@ -256,6 +224,7 @@
                 uv[i * 2 + 1] = (pos.getY(i) - bBox.min.y) / size.y;
             }
             lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+
             renderer.render(scene, camera);
         }
 
@@ -266,11 +235,12 @@
         };
 
         window.updateOpacity = (v) => {
-            lipMaterial.uniforms.uOpacity.value = v;
+            lipMaterial.uniforms.uOpacity.value = parseFloat(v);
             document.getElementById("int-val").innerText = Math.round(v * 100) + "%";
         };
 
         init();
+        });
     </script>
 </body>
 </html>
