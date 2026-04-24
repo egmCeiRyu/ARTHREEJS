@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Makeup - Full Lip Fill</title>
+    <title>AR Makeup - No Teeth Painting</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -95,8 +95,11 @@
         let scene, camera, renderer, lipMesh, material;
         let smoothedLandmarks = null;
 
-        // Lista de pontos que formam o contorno completo da boca
-        const LIPS_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 408, 415, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146];
+        // 1. MAPEAMENTO DE PONTOS (EXTERNO E INTERNO)
+        // Contorno que percorre a borda de fora da boca inteira
+        const LIPS_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 408, 415, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
+        // Contorno que percorre a borda de dentro (onde a boca abre)
+        const LIPS_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
 
         function init() {
             scene = new THREE.Scene();
@@ -114,6 +117,7 @@
                 side: THREE.DoubleSide
             });
 
+            // Criamos uma geometria vazia inicial
             const geometry = new THREE.BufferGeometry();
             lipMesh = new THREE.Mesh(geometry, material);
             scene.add(lipMesh);
@@ -127,6 +131,7 @@
 
             const landmarks = results.multiFaceLandmarks[0];
 
+            // Suavização
             if (!smoothedLandmarks) {
                 smoothedLandmarks = landmarks;
             } else {
@@ -136,29 +141,38 @@
                 }));
             }
 
-            const vertices = [];
-            const indices = [];
+            // --- NOVA LÓGICA DE GEOMETRIA COM FURO ---
 
-            // PONTO CENTRAL: Usamos o ponto 13 (centro dos lábios) como âncora para preencher
-            const center = smoothedLandmarks[13];
-            vertices.push(center.x, 1 - center.y, 0); // O índice 0 será o centro
+            // 1. Criar a Forma Externa (O formato do batom)
+            const mouthShape = new THREE.Shape();
+            const startOuter = smoothedLandmarks[LIPS_OUTER[0]];
+            mouthShape.moveTo(startOuter.x, 1 - startOuter.y);
 
-            // Adicionamos os pontos do contorno
-            LIPS_OUTER.forEach((idx, i) => {
-                const p = smoothedLandmarks[idx];
-                vertices.push(p.x, 1 - p.y, 0);
+            for (let i = 1; i < LIPS_OUTER.length; i++) {
+                const p = smoothedLandmarks[LIPS_OUTER[i]];
+                mouthShape.lineTo(p.x, 1 - p.y);
+            }
 
-                // Criamos triângulos conectando o centro, o ponto atual e o próximo ponto
-                if (i > 0) {
-                    indices.push(0, i, i + 1);
-                }
-            });
-            // Fecha o último triângulo com o primeiro ponto do contorno
-            indices.push(0, LIPS_OUTER.length, 1);
+            // 2. Criar a Forma Interna (O buraco da boca)
+            const holePath = new THREE.Path();
+            const startInner = smoothedLandmarks[LIPS_INNER[0]];
+            holePath.moveTo(startInner.x, 1 - startInner.y);
 
-            const vArray = new Float32Array(vertices);
-            lipMesh.geometry.setAttribute('position', new THREE.BufferAttribute(vArray, 3));
-            lipMesh.geometry.setIndex(indices); // Define como os triângulos são conectados
+            for (let i = 1; i < LIPS_INNER.length; i++) {
+                const p = smoothedLandmarks[LIPS_INNER[i]];
+                holePath.lineTo(p.x, 1 - p.y);
+            }
+
+            // 3. Adicionar o buraco à forma principal
+            mouthShape.holes.push(holePath);
+
+            // 4. Gerar a geometria a partir da forma (Isso triangula automaticamente com o furo)
+            const geometry = new THREE.ShapeGeometry(mouthShape);
+
+            // 5. Atualizar a malha existente com a nova geometria
+            // No Three.js, é mais eficiente dispose() da geometria antiga e set a nova
+            lipMesh.geometry.dispose();
+            lipMesh.geometry = geometry;
 
             renderer.render(scene, camera);
         }
