@@ -191,99 +191,150 @@
 
                 container3d.appendChild(renderer.domElement);
 
-                lipMaterial =
-                    new THREE.ShaderMaterial({
+                lipMaterial = new THREE.ShaderMaterial({
 
-                        transparent: true,
-                        side: THREE.DoubleSide,
-                        depthWrite: false,
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
 
-                        uniforms: {
-                            uColor: { value: new THREE.Color(0xbe1e2d) },
-                            uOpacity: { value: 0.58 }
-                        },
+                    uniforms: {
+                        uColor: { value: new THREE.Color(0xbe1e2d) },
+                        uOpacity: { value: 0.58 }
+                    },
 
-                        vertexShader: `
+                    vertexShader: `
 
-                    varying vec2 vUv;
+varying vec2 vUv;
 
-                    void main(){
+void main(){
 
-                        vUv = uv;
+    vUv = uv;
 
-                        gl_Position =
-                            projectionMatrix *
-                            modelViewMatrix *
-                            vec4(position,1.0);
-                    }
+    gl_Position =
+        projectionMatrix *
+        modelViewMatrix *
+        vec4(position,1.0);
+}
+`,
 
-                `,
+                    fragmentShader: `
 
-                        fragmentShader: `
+                        uniform vec3 uColor;
+                        uniform float uOpacity;
 
-                    uniform vec3 uColor;
-                    uniform float uOpacity;
+                        varying vec2 vUv;
 
-                    varying vec2 vUv;
+                        void main(){
 
-                    void main(){
+                        /* =========================
+                        BASE MASK
+                        ========================= */
 
                         float mask =
-                            smoothstep(0.0,0.08,vUv.x) *
-                            smoothstep(1.0,0.92,vUv.x) *
-                            smoothstep(0.0,0.12,vUv.y) *
-                            smoothstep(1.0,0.88,vUv.y);
+                        smoothstep(0.0,0.08,vUv.x) *
+                        smoothstep(1.0,0.92,vUv.x) *
+                        smoothstep(0.0,0.12,vUv.y) *
+                        smoothstep(1.0,0.88,vUv.y);
 
-                        /* REMOVE COR DENTRO DA BOCA */
+                        /* =========================
+                        INNER MOUTH CUT
+                        (remove cor dentro da boca)
+                        ========================= */
 
-                        float centerX =
-                            1.0 - abs(vUv.x - 0.5) * 2.0;
+                        float holeX =
+                        1.0 - abs(vUv.x - 0.5) * 2.0;
 
-                        float centerY =
-                            1.0 - abs(vUv.y - 0.5) * 2.0;
+                        float holeY =
+                        1.0 - abs(vUv.y - 0.5) * 2.0;
 
-                        centerX = pow(centerX,1.3);
-                        centerY = pow(centerY,3.8);
+                        holeX = pow(holeX,1.25);
+                        holeY = pow(holeY,4.2);
 
                         float mouthHole =
-                            centerX * centerY;
+                        holeX * holeY;
 
                         mask *= (1.0 - mouthHole);
 
-                        /* SOMBRA NATURAL */
+                        /* =========================
+                        DEPTH / SHADE
+                        ========================= */
 
                         float occlusion =
-                            mix(
-                                0.62,
-                                1.0,
-                                smoothstep(
-                                    0.0,
-                                    0.55,
-                                    abs(vUv.y - 0.5)
-                                )
-                            );
+                        mix(
+                        0.64,
+                        1.0,
+                        smoothstep(
+                        0.0,
+                        0.55,
+                        abs(vUv.y - 0.5)
+                        )
+                        );
 
-                        /* GLOSS SUAVE */
+                        /* =========================
+                        LOWER LIP MAIN GLOSS
+                        ========================= */
 
-                        float gloss =
-                            pow(
-                                max(
-                                    0.0,
-                                    1.0 - distance(vUv,vec2(0.5,0.78))*4.0
-                                ),
-                                4.0
-                            ) * 0.16;
+                        float g1x =
+                        1.0 - abs(vUv.x - 0.5) * 2.0;
+
+                        float g1y =
+                        1.0 - abs(vUv.y - 0.72) * 4.2;
+
+                        g1x = pow(g1x,2.6);
+                        g1y = max(g1y,0.0);
+                        g1y = pow(g1y,2.2);
+
+                        float gloss1 =
+                        g1x * g1y * 0.34;
+
+                        /* =========================
+                        UPPER LIGHT LINE
+                        ========================= */
+
+                        float g2x =
+                        1.0 - abs(vUv.x - 0.5) * 2.2;
+
+                        float g2y =
+                        1.0 - abs(vUv.y - 0.28) * 8.0;
+
+                        g2x = pow(g2x,3.0);
+                        g2y = max(g2y,0.0);
+                        g2y = pow(g2y,3.0);
+
+                        float gloss2 =
+                        g2x * g2y * 0.14;
+
+                        /* =========================
+                        CENTER SOFT SHINE
+                        ========================= */
+
+                        float shine =
+                        pow(
+                        max(
+                        0.0,
+                        1.0 - distance(vUv,vec2(0.5,0.52)) * 2.2
+                        ),
+                        4.0
+                        ) * 0.10;
+
+                        /* =========================
+                        FINAL COLOR
+                        ========================= */
 
                         vec3 col =
-                            uColor * occlusion +
-                            vec3(gloss);
+                        uColor * occlusion;
+
+                        col += vec3(gloss1);
+                        col += vec3(gloss2);
+                        col += vec3(shine);
 
                         gl_FragColor =
-                            vec4(col,mask*uOpacity);
-                    }
+                        vec4(col, mask * uOpacity);
 
-                `
-                    });
+                        }
+                        `
+
+                });
 
                 lipMesh =
                     new THREE.Mesh(
