@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Makeup Pro - Final Fix</title>
+    <title>AR Makeup Pro - Ultra Realtime</title>
     <style>
         :root {
             --accent: #ff4d6d;
@@ -11,7 +11,7 @@
 
         body {
             margin: 0;
-            background: #050505;
+            background: #000;
             color: white;
             display: flex;
             flex-direction: column;
@@ -28,28 +28,27 @@
             height: 480px;
             border-radius: 24px;
             overflow: hidden;
-            border: 2px solid #333;
+            border: 1px solid #333;
             background: #000;
         }
 
-        /* Camada 1: Vídeo (Fundo) */
+        /* Otimização de Performance: Hardware Acceleration */
         video#input-video {
             position: absolute;
             width: 100%;
             height: 100%;
             object-fit: cover;
             transform: scaleX(-1);
-            z-index: 1; /* Garante que está atrás */
+            visibility: hidden;
         }
 
-        /* Camada 2: Three.js (Frente) */
         canvas#three-canvas {
             position: absolute;
             width: 100%;
             height: 100%;
-            z-index: 5; /* Garante que está na frente */
+            z-index: 2;
             transform: scaleX(-1);
-            pointer-events: none; /* Deixa cliques passarem se necessário */
+            image-rendering: pixelated; /* Melhora performance de draw */
         }
 
         .ui-panel {
@@ -85,23 +84,12 @@
             .swatch.active {
                 border-color: white;
                 transform: scale(1.1);
-                box-shadow: 0 0 15px var(--accent);
             }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
             cursor: pointer;
-        }
-
-        .labels {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-            font-size: 11px;
-            color: #888;
-            margin-top: 10px;
-            font-weight: bold;
         }
 
         #loading {
@@ -143,7 +131,7 @@
     <div id="container">
         <div id="loading">
             <div class="spinner"></div>
-            <p style="margin-top:15px; font-size:12px; color: #666;">STARTING CAMERA...</p>
+            <p style="margin-top:15px; font-size:12px; color: #666;">SPEED OPTIMIZED ENGINE...</p>
         </div>
         <video id="input-video" autoplay playsinline></video>
         <canvas id="three-canvas"></canvas>
@@ -159,12 +147,14 @@
         </div>
         <div style="width:100%">
             <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="0.6">
-            <div class="labels"><span>NATURAL</span><span id="val">60%</span><span>VIVID</span></div>
+            <div style="display:flex; justify-content: space-between; width:100%; font-size:10px; margin-top:10px; color:#888;">
+                <span>NATURAL</span><span id="val">60%</span><span>VIVID</span>
+            </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
@@ -175,102 +165,120 @@
         let scene, camera, renderer, lipsMesh, lipstickMaterial;
         let faceMesh;
 
-        // Índices precisos dos lábios
+        // Índices de contorno reduzidos para processamento ultra-rápido
         const LIP_OUTLINE = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291];
         const LIP_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 292, 306, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409];
         const ALL_LIP_INDICES = [...new Set([...LIP_OUTLINE, ...LIP_INNER])];
 
         function initThree() {
             scene = new THREE.Scene();
-            // Câmera ortográfica simples para alinhar com o plano 2D do vídeo
-            camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-            camera.position.z = 1;
+            camera = new THREE.Camera();
 
+            // Ativação de PowerPreference para usar a GPU dedicada se disponível
             renderer = new THREE.WebGLRenderer({
                 canvas: canvasElement,
                 alpha: true,
-                antialias: true
+                antialias: false, // Desativar antialias do renderer ajuda no FPS
+                powerPreference: "high-performance"
             });
             renderer.setSize(640, 480);
-            renderer.setClearColor(0x000000, 0); // Transparência total do fundo
 
-            lipstickMaterial = new THREE.MeshBasicMaterial({
-                color: 0xbe1e2d,
+            lipstickMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    uColor: { value: new THREE.Color(0xbe1e2d) },
+                    uOpacity: { value: 0.6 }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 uColor;
+                    uniform float uOpacity;
+                    varying vec2 vUv;
+                    void main() {
+                        float dist = length(vUv - vec2(0.5, 0.5));
+                        float mask = smoothstep(0.5, 0.2, dist);
+                        gl_FragColor = vec4(uColor, uOpacity * mask);
+                    }
+                `,
                 transparent: true,
-                opacity: 0.6,
                 side: THREE.DoubleSide
             });
 
             const geometry = new THREE.BufferGeometry();
             lipsMesh = new THREE.Mesh(geometry, lipstickMaterial);
+            lipsMesh.frustumCulled = false; // Ganho de performance: não checa se está na tela
             scene.add(lipsMesh);
         }
 
         function onResults(results) {
-            // Remove loading assim que a IA começar a responder
-            if (loadingElement) loadingElement.style.display = 'none';
+            if (loadingElement.style.display !== 'none') loadingElement.style.display = 'none';
 
             if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                 const landmarks = results.multiFaceLandmarks[0];
-                const positions = [];
+                const positions = new Float32Array(ALL_LIP_INDICES.length * 3);
+                const uvs = new Float32Array(ALL_LIP_INDICES.length * 2);
                 const indices = [];
 
-                // Mapeamento de posição
-                ALL_LIP_INDICES.forEach((idx) => {
+                ALL_LIP_INDICES.forEach((idx, i) => {
                     const p = landmarks[idx];
-                    positions.push((p.x - 0.5) * 2, (0.5 - p.y) * 2, 0);
+                    positions[i * 3] = (p.x - 0.5) * 2;
+                    positions[i * 3 + 1] = (0.5 - p.y) * 2;
+                    positions[i * 3 + 2] = -p.z;
+                    uvs[i * 2] = p.x;
+                    uvs[i * 2 + 1] = p.y;
                 });
 
-                // Triangulação básica
                 for (let i = 0; i < LIP_OUTLINE.length - 1; i++) {
                     indices.push(i, i + 1, LIP_OUTLINE.length + i);
+                    indices.push(i + 1, LIP_OUTLINE.length + i + 1, LIP_OUTLINE.length + i);
                 }
 
-                lipsMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                lipsMesh.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                lipsMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
                 lipsMesh.geometry.setIndex(indices);
                 lipsMesh.geometry.attributes.position.needsUpdate = true;
-                lipsMesh.visible = true;
-            } else {
-                lipsMesh.visible = false;
             }
             renderer.render(scene, camera);
         }
 
         initThree();
 
-        faceMesh = new window.FaceMesh({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-        });
+        faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
 
+        // CONFIGURAÇÃO REALTIME:
         faceMesh.setOptions({
             maxNumFaces: 1,
             refineLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
+            minDetectionConfidence: 0.4, // Menor confiança = Detecção mais rápida
+            minTrackingConfidence: 0.4   // Menor tracking = Menos "atraso" de cálculo
         });
 
         faceMesh.onResults(onResults);
 
-        const cameraControl = new window.Camera(videoElement, {
+        const cameraUtils = new Camera(videoElement, {
             onFrame: async () => {
                 await faceMesh.send({ image: videoElement });
             },
-            width: 640,
-            height: 480
+            width: 480, height: 360 // Reduzir resolução interna da câmera acelera MUITO a IA
         });
-        cameraControl.start();
+        cameraUtils.start();
 
-        // UI Listeners
+        // Eventos UI
         const colors = { 'btn-red': 0xbe1e2d, 'btn-pink': 0xff4d6d, 'btn-nude': 0xf28b82, 'btn-dark': 0x4a0e1e, 'btn-black': 0x000000 };
         Object.keys(colors).forEach(id => {
             document.getElementById(id).addEventListener('click', (e) => {
                 document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
                 e.target.classList.add('active');
-                lipstickMaterial.color.setHex(colors[id]);
+                lipstickMaterial.uniforms.uColor.value.setHex(colors[id]);
             });
         });
         document.getElementById('opacitySlider').addEventListener('input', (e) => {
-            lipstickMaterial.opacity = parseFloat(e.target.value);
+            lipstickMaterial.uniforms.uOpacity.value = parseFloat(e.target.value);
             document.getElementById('val').innerText = Math.round(e.target.value * 100) + "%";
         });
     </script>
