@@ -186,13 +186,13 @@
             // No scaleY, aplicamos um fator que empurra o topo para CIMA (convexo)
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
-                let sY = 1.02;
+                let sY = 0.8;
 
                 // Pontos do Arco do Cupido (37, 0, 267)
                 // Aumentamos a escala vertical para esses pontos específicos para criar a convexidade
                 if (id === 37 || id === 0 || id === 267) sY =1.01;
 
-                const x = center.x + (p.x - center.x) * 1.15;
+                const x = center.x + (p.x - center.x) * 1.10;
                 const y = center.y + (p.y - center.y) * sY;
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
@@ -201,7 +201,7 @@
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
-                const x = center.x + (p.x - center.x) * 1.15;
+                const x = center.x + (p.x - center.x) * 1.10;
                 const y = center.y + (p.y - center.y) * 1.0;
                 if (i === 0) hole.moveTo(x, 1 - y);
                 else hole.lineTo(x, 1 - y);
