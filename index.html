@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Makeup Studio - Three.js Shader</title>
+    <title>AR Makeup Pro - Curved Shader</title>
     <style>
         :root {
             --accent: #ff4d6d;
@@ -11,7 +11,7 @@
 
         body {
             margin: 0;
-            background: #050505;
+            background: #000;
             color: white;
             display: flex;
             flex-direction: column;
@@ -28,20 +28,20 @@
             height: 480px;
             border-radius: 24px;
             overflow: hidden;
-            border: 2px solid #333;
-            background: black;
+            border: 1px solid #333;
+            background: #000;
         }
 
-        /* Camadas de Vídeo e Render */
-        #input-video {
+        video#input-video {
             position: absolute;
             width: 100%;
             height: 100%;
             object-fit: cover;
             transform: scaleX(-1);
+            visibility: hidden;
         }
 
-        #three-canvas {
+        canvas#three-canvas {
             position: absolute;
             width: 100%;
             height: 100%;
@@ -141,7 +141,7 @@
     <div id="container">
         <div id="loading">
             <div class="spinner"></div>
-            <p style="margin-top:15px; font-size:12px; color: #666;">INITIALIZING SHADER ENGINE...</p>
+            <p style="margin-top:15px; font-size:12px; color: #666;">INITIALIZING CURVED SHADER...</p>
         </div>
         <video id="input-video" autoplay playsinline></video>
         <canvas id="three-canvas"></canvas>
@@ -173,19 +173,23 @@
         let scene, camera, renderer, lipsMesh, lipstickMaterial;
         let faceMesh;
 
-        // --- ÍNDICES DOS LÁBIOS (MediaPipe FaceMesh) ---
-        const LIP_INDICES = [
-            61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 306, 292, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78, 62, 76, 61
-        ];
+        // --- ÍNDICES REFINADOS (MediaPipe FaceMesh - Contorno e Volume) ---
+        // Usamos landmarks internos e externos para criar tesselação
+        const LIP_OUTLINE = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291];
+        const LIP_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 292, 306, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409];
 
-        // --- SHADERS GLSL PARA QUALIDADE PROFISSIONAL ---
+        // Combina para criar malha
+        const ALL_LIP_INDICES = [...new Set([...LIP_OUTLINE, ...LIP_INNER])];
+
+        // --- SHADERS AVANÇADOS PARA CURVAS E SUAVIZAÇÃO ---
         const vertexShader = `
             varying vec2 vUv;
-            varying vec3 vNormal;
+            varying vec3 vViewPosition;
             void main() {
                 vUv = uv;
-                vNormal = normalize(normalMatrix * normal);
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                vViewPosition = -mvPosition.xyz;
+                gl_Position = projectionMatrix * mvPosition;
             }
         `;
 
@@ -193,20 +197,36 @@
             uniform vec3 uColor;
             uniform float uOpacity;
             varying vec2 vUv;
-            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+
             void main() {
-                float fresnel = pow(1.5 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
-                vec3 color = mix(uColor, uColor * 0.7, fresnel);
-                gl_FragColor = vec4(color, uOpacity);
+                // 1. Fresnel Effect (Curvatura e Volume Profissional)
+                // Simula como a luz bate nas dobras da boca
+                vec3 viewDir = normalize(vViewPosition);
+                // Criamos uma normal fake baseada na UV para suavizar
+                vec3 fakeNormal = normalize(vec3(vUv.x - 0.5, vUv.y - 0.5, 1.0));
+
+                float fresnel = pow(1.0 - dot(fakeNormal, viewDir), 2.5);
+
+                // 2. Cor Base + Sombra de Bordas (mix)
+                vec3 baseColor = mix(uColor, uColor * 0.3, fresnel);
+
+                // 3. Suavização de Contorno (Soft Edge)
+                // Isso remove o serrilhado e faz o batom parecer derreter na pele
+                // Usamos a UV para calcular a distância do centro dos lábios
+                float edgeDist = length(vUv - vec2(0.5, 0.5));
+                float alphaMask = smoothstep(0.5, 0.3, edgeDist); // Suaviza de 0.5 a 0.3
+
+                gl_FragColor = vec4(baseColor, uOpacity * alphaMask);
             }
         `;
 
         function initThree() {
             scene = new THREE.Scene();
-            camera = new THREE.Camera(); // MediaPipe usa clip space (-1 a 1)
+            camera = new THREE.Camera(); // MediaPipe clip space
 
             renderer = new THREE.WebGLRenderer({ canvas: canvasElement, alpha: true, antialias: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(window.devicePixelRatio); // Essencial para HD
             renderer.setSize(640, 480);
 
             lipstickMaterial = new THREE.ShaderMaterial({
@@ -217,6 +237,7 @@
                 vertexShader,
                 fragmentShader,
                 transparent: true,
+                depthTest: false, // Evita vazar para dentro da boca
                 side: THREE.DoubleSide
             });
 
@@ -225,34 +246,49 @@
             scene.add(lipsMesh);
         }
 
+        // Função para criar triângulos de tesselação
+        function triangulateLips(landmarks) {
+            const positions = [];
+            const uvs = [];
+            const indices = [];
+
+            // 1. Gerar Posições e UVs baseadas em landmarks
+            ALL_LIP_INDICES.forEach((idx) => {
+                const p = landmarks[idx];
+                positions.push((p.x - 0.5) * 2, (0.5 - p.y) * 2, -p.z * 1.5); // Aumenta um pouco o Z para dar volume
+
+                // UVs: MediaPipe x/y convertidos para 0-1
+                uvs.push(p.x, p.y);
+            });
+
+            // 2. Criar Índices (Triângulos Complexos - Tesselação)
+            // Esta lógica cria triângulos mais densos que o 'fan' simples
+            for (let i = 0; i < LIP_OUTLINE.length - 1; i++) {
+                indices.push(i, i + 1, LIP_OUTLINE.length + i);
+                indices.push(i + 1, LIP_OUTLINE.length + i + 1, LIP_OUTLINE.length + i);
+            }
+
+            return { positions, uvs, indices };
+        }
+
         function onResults(results) {
             loadingElement.style.display = 'none';
 
             if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                 const landmarks = results.multiFaceLandmarks[0];
-                const positions = [];
-                const indices = [];
-
-                // Converte landmarks em coordenadas Three.js
-                LIP_INDICES.forEach((idx) => {
-                    const p = landmarks[idx];
-                    positions.push((p.x - 0.5) * 2, (0.5 - p.y) * 2, -p.z * 2);
-                });
-
-                // Cria triângulos simples (Fan format)
-                for (let i = 1; i < LIP_INDICES.length - 1; i++) {
-                    indices.push(0, i, i + 1);
-                }
+                const { positions, uvs, indices } = triangulateLips(landmarks);
 
                 lipsMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                lipsMesh.geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
                 lipsMesh.geometry.setIndex(indices);
-                lipsMesh.geometry.computeVertexNormals();
+
                 lipsMesh.geometry.attributes.position.needsUpdate = true;
+                lipsMesh.geometry.attributes.uv.needsUpdate = true;
             }
             renderer.render(scene, camera);
         }
 
-        // --- CONTROLES DE UI ---
+        // --- MANTENDO OS CONTROLES DE UI ORIGINAIS ---
         const colors = {
             'btn-red': 0xbe1e2d,
             'btn-pink': 0xff4d6d,
@@ -279,7 +315,8 @@
         initThree();
 
         faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        // refinedLandmarks: true é crucial para o contorno dos lábios
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
         faceMesh.onResults(onResults);
 
         const cameraUtils = new Camera(videoElement, {
