@@ -285,12 +285,20 @@
                 smoothed[i].y += (landmarks[i].y - smoothed[i].y) * factor;
             }
         }
+        let geoFrame = 0;
 
         function updateLips(landmarks) {
 
             lipMesh.visible = true;
 
             smooth(landmarks);
+
+            geoFrame++;
+
+            if (geoFrame % 3 !== 0) {
+                renderer.render(scene, camera);
+                return;
+            }
 
             const shape = new THREE.Shape();
 
@@ -312,7 +320,7 @@
 
             if (lipMesh.geometry) lipMesh.geometry.dispose();
 
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 2);
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 1);
 
             renderer.render(scene, camera);
         }
