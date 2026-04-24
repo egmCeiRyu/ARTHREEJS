@@ -134,7 +134,7 @@
                 // ABAIXAR AS "ASAS" DO ARCO (Conforme seu desenho)
                 // Reduzimos o sY para esses pontos subirem menos na pele
                 if (id === 40 || id === 39 || id === 269 || id === 270) {
-                    sY = 0.94; 
+                    sY = 0.90; 
                 }
 
                 // CENTRO DO ARCO (O "V")
@@ -161,7 +161,7 @@
             shape.holes = [hole];
 
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 16); // Alta qualidade
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 5); // Alta qualidade
 
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
