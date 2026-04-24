@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - High Precision Banuba Shape</title>
+    <title>AR Lipstick - Banuba Pro No-Fill</title>
     <style>
         :root {
             --accent: #ff4d6d;
@@ -119,7 +119,6 @@
             let smoothed = null;
             let lastVideoTime = -1;
 
-            // ÍNDICES ANATÔMICOS DE PRECISÃO (40 PONTOS)
             const OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
             const INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
 
@@ -162,23 +161,12 @@
                             uniform float uOpacity;
                             varying vec2 vUv;
                             void main(){
-                                // 1. MÁSCARA DE BORDA (Feathering suave Banuba)
                                 float mask = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x) *
                                              smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
-
-                                // 2. OCLUSÃO INTERNA SUAVIZADA (Aprovado anteriormente)
-                                float occlusion = smoothstep(0.0, 0.5, abs(vUv.y - 0.5));
-                                occlusion = mix(0.55, 1.0, occlusion);
-
-                                // 3. GLOSS (Brilho focado)
-                                float upperGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.78)) * 4.0), 4.0);
-                                float lowerGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.22)) * 4.5), 5.0);
-                                float gloss = (upperGloss + lowerGloss) * 0.22;
-
-                                // 4. COMPOSIÇÃO FINAL
-                                vec3 col = uColor * occlusion;
-                                col += vec3(gloss);
-
+                                float occlusion = mix(0.55, 1.0, smoothstep(0.0, 0.5, abs(vUv.y - 0.5)));
+                                float gloss = (pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.78)) * 4.0), 4.0) +
+                                               pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.22)) * 4.5), 5.0)) * 0.22;
+                                vec3 col = uColor * occlusion + vec3(gloss);
                                 gl_FragColor = vec4(col, mask * uOpacity);
                             }
                         `
@@ -190,9 +178,7 @@
             }
 
             function startCamera() {
-                navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480, frameRate: { ideal: 60 } }
-                }).then(stream => {
+                navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then(stream => {
                     video.srcObject = stream;
                     video.requestVideoFrameCallback(loop);
                 });
@@ -209,18 +195,25 @@
                 video.requestVideoFrameCallback(loop);
             }
 
-            // Função para gerar pontos suavizados por Spline (Crucial para o Banuba Shape)
-            function getSplinePoints(points, divisions = 12) {
+            // Spline Suave para o Shape Banuba
+            function getSplinePoints(indices, landmarks, center, scale) {
+                const points = indices.map(id => {
+                    const p = landmarks[id];
+                    return new THREE.Vector3(
+                        center.x + (p.x - center.x) * scale,
+                        1 - (center.y + (p.y - center.y) * scale),
+                        0
+                    );
+                });
                 const curve = new THREE.CatmullRomCurve3(points);
                 curve.closed = true;
-                return curve.getPoints(divisions * points.length);
+                return curve.getPoints(indices.length * 8);
             }
 
             function updateLips(landmarks) {
                 lipMesh.visible = true;
-                if (!smoothed) {
-                    smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
-                } else {
+                if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
+                else {
                     for (let i = 0; i < landmarks.length; i++) {
                         smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.95;
                         smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.95;
@@ -228,40 +221,31 @@
                 }
 
                 const center = smoothed[13];
-                // Escala volumétrica sutil (Dá o aspecto "plump" da Banuba)
-                const fit = (p) => new THREE.Vector3(
-                    center.x + (p.x - center.x) * 1.015,
-                    1 - (center.y + (p.y - center.y) * 1.015),
-                    0
-                );
 
-                // --- GERAÇÃO DO SHAPE DE ALTA PRECISÃO ---
-                const outerPoints3d = OUTER.map(id => fit(smoothed[id]));
-                const smoothOuterPoints = getSplinePoints(outerPoints3d);
+                // --- GEOMETRIA COM FURO REAL ---
+                const outerSpline = getSplinePoints(OUTER, smoothed, center, 1.015);
+                const innerSpline = getSplinePoints(INNER, smoothed, center, 0.98); // Ligeiramente menor para evitar vazar
 
                 const mouthShape = new THREE.Shape();
-                mouthShape.moveTo(smoothOuterPoints[0].x, smoothOuterPoints[0].y);
-                smoothOuterPoints.forEach(p => mouthShape.lineTo(p.x, p.y));
-
-                // Furo interno
-                const innerPoints3d = INNER.map(id => fit(smoothed[id]));
-                const smoothInnerPoints = getSplinePoints(innerPoints3d);
+                mouthShape.moveTo(outerSpline[0].x, outerSpline[0].y);
+                outerSpline.forEach(p => mouthShape.lineTo(p.x, p.y));
 
                 const holePath = new THREE.Path();
-                holePath.moveTo(smoothInnerPoints[0].x, smoothInnerPoints[0].y);
-                smoothInnerPoints.forEach(p => holePath.lineTo(p.x, p.y));
-
+                holePath.moveTo(innerSpline[0].x, innerSpline[0].y);
+                // INVERTER A ORDEM DO FURO (Sentido Horário vs Anti-horário)
+                // Isso é o que impede de pintar dentro da boca
+                for (let i = innerSpline.length - 1; i >= 0; i--) {
+                    holePath.lineTo(innerSpline[i].x, innerSpline[i].y);
+                }
                 mouthShape.holes = [holePath];
 
                 if (lipMesh.geometry) lipMesh.geometry.dispose();
-                // ShapeGeometry(shape, 12) garante curvas suaves e anatômicas
-                lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 12);
+                lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 4);
 
-                // Mapeamento UV preciso
+                // Mapeamento UV para o Shader
                 const pos = lipMesh.geometry.attributes.position;
                 const box = new THREE.Box3().setFromBufferAttribute(pos);
-                const size = new THREE.Vector3();
-                box.getSize(size);
+                const size = new THREE.Vector3(); box.getSize(size);
                 const uv = new Float32Array(pos.count * 2);
                 for (let i = 0; i < pos.count; i++) {
                     uv[i * 2] = (pos.getX(i) - box.min.x) / size.x;
