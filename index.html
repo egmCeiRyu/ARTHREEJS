@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Banuba Precision</title>
+    <title>AR Lipstick - Banuba Mesh Precision</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root { --accent: #ff4d6d; }
@@ -46,6 +46,14 @@
         let smoothed = null;
         let lastVideoTime = -1;
 
+        // MAPA DE TRIÂNGULOS (Conecta borda externa com interna)
+        const MESH_MAP = [
+            [61, 185, 78], [185, 40, 191], [40, 39, 80], [39, 37, 81], [37, 0, 82], [0, 267, 13],
+            [267, 269, 312], [269, 270, 311], [270, 409, 310], [409, 291, 415], [291, 308, 415],
+            [291, 375, 308], [375, 321, 324], [321, 405, 318], [405, 314, 402], [314, 17, 317],
+            [17, 84, 14], [84, 181, 87], [181, 91, 178], [91, 146, 88], [146, 61, 95], [61, 78, 95]
+        ];
+
         async function init() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
@@ -61,6 +69,7 @@
             renderer.setSize(640, 480);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
+            // MANTIDO: Seu Shader de Gloss Estável
             lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
                 uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.65 } },
@@ -109,68 +118,38 @@
             drawLips();
         }
 
-function drawLips() {
-    const center = smoothed[13];
-    const shape = new THREE.Shape();
+        function drawLips() {
+            const vertices = [];
+            const uvs = [];
+            const indices = [];
 
-    // IDs para um desenho fluido
-    const topPoints = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291];
-    const bottomPoints = [291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
+            // CONSTRUÇÃO DA MALHA POR TRIÂNGULOS (Lógica de precisão)
+            MESH_MAP.forEach((tri, idx) => {
+                tri.forEach(id => {
+                    const p = smoothed[id];
+                    // Escala mínima (1.02) apenas para cobrir a borda real
+                    const scale = 1.02;
+                    const centerX = smoothed[13].x;
+                    const centerY = smoothed[13].y;
+                    
+                    const vx = centerX + (p.x - centerX) * scale;
+                    const vy = centerY + (p.y - centerY) * scale;
 
-    const getPt = (id, sx = 1.02, sy = 1.0) => {
-        const p = smoothed[id];
-        // O Banuba não expande o batom para fora, ele mantém quase 1:1
-        return new THREE.Vector2(
-            center.x + (p.x - center.x) * sx,
-            1 - (center.y + (p.y - center.y) * sy)
-        );
-    };
+                    vertices.push(vx, 1 - vy, 0);
+                    uvs.push(p.x, p.y);
+                });
+                const base = idx * 3;
+                indices.push(base, base + 1, base + 2);
+            });
 
-    // Início no canto com precisão 1:1
-    const start = getPt(61, 1.0, 1.0);
-    shape.moveTo(start.x, start.y);
+            const geometry = lipMesh.geometry;
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
 
-    // Desenho do Topo com suavização de curva
-    topPoints.forEach((id, i) => {
-        if (i === 0) return;
-        const p = getPt(id, 1.02, id === 0 ? 1.05 : 1.01); 
-        // Usamos spline manual: o ponto anterior serve de controle suave
-        const prev = getPt(topPoints[i-1], 1.02, 1.01);
-        shape.quadraticCurveTo(prev.x, prev.y, p.x, p.y);
-    });
-
-    // Desenho da Base
-    bottomPoints.forEach((id, i) => {
-        if (i === 0) return;
-        const p = getPt(id, 1.02, 1.03);
-        const prev = getPt(bottomPoints[i-1], 1.02, 1.03);
-        shape.quadraticCurveTo(prev.x, prev.y, p.x, p.y);
-    });
-
-    // Furo Interno (Hole) com recuo para não pintar dentes
-    const hole = new THREE.Path();
-    const INNER_IDS = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
-    INNER_IDS.forEach((id, i) => {
-        const p = getPt(id, 0.98, 0.98); // Encolhe levemente para dentro
-        if (i === 0) hole.moveTo(p.x, p.y); else hole.lineTo(p.x, p.y);
-    });
-    shape.holes = [hole];
-
-    if (lipMesh.geometry) lipMesh.geometry.dispose();
-    lipMesh.geometry = new THREE.ShapeGeometry(shape, 32); // Mais faces para suavidade Banuba
-
-    // UV e Render (mantém o resto igual)
-    const pos = lipMesh.geometry.attributes.position;
-    const bbox = new THREE.Box3().setFromBufferAttribute(pos);
-    const size = new THREE.Vector3(); bbox.getSize(size);
-    const uv = new Float32Array(pos.count * 2);
-    for (let i = 0; i < pos.count; i++) {
-        uv[i * 2] = (pos.getX(i) - bbox.min.x) / size.x;
-        uv[i * 2 + 1] = (pos.getY(i) - bbox.min.y) / size.y;
-    }
-    lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    renderer.render(scene, camera);
-}
+            renderer.render(scene, camera);
+        }
 
         window.changeColor = (hex, el) => {
             lipMaterial.uniforms.uColor.value.setHex(hex);
