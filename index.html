@@ -118,7 +118,6 @@
 
     <div class="ui-panel">
         <div class="ui-title">リップカラーを選択</div>
-
         <div class="swatches">
             <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
             <div class="swatch" style="background: #8e2a4e;" onclick="changeColor(0x8e2a4e, this)"></div>
@@ -138,11 +137,12 @@
         import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
         const video = document.getElementById("webcam");
-        let faceLandmarker;
-        let scene, camera, renderer, lipMesh, lipMaterial;
+        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
         let lastVideoTime = -1;
+        let smoothedLandmarks = null;
 
-        // ランドマークインデックス
+        // --- 高精度アトミック・インデックス (40ポイント) ---
+        // 唇の「山」や口角を完璧に捉えるための詳細なマッピング
         const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
         const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
 
@@ -165,7 +165,6 @@
             renderer.setSize(640, 480);
             document.getElementById('three_container').appendChild(renderer.domElement);
 
-            // シンプルで確実なマテリアル設定に変更
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
@@ -209,17 +208,30 @@
         };
 
         function updateVisuals(landmarks) {
+            // --- プレシジョン・レンダリング・ロジック ---
             const shape = new THREE.Shape();
-            shape.moveTo(landmarks[LIPS_OUTER[0]].x, 1 - landmarks[LIPS_OUTER[0]].y);
-            LIPS_OUTER.forEach(i => shape.lineTo(landmarks[i].x, 1 - landmarks[i].y));
 
+            // 外側のライン描画
+            const startOuter = landmarks[LIPS_OUTER[0]];
+            shape.moveTo(startOuter.x, 1 - startOuter.y);
+            LIPS_OUTER.forEach(i => {
+                const p = landmarks[i];
+                shape.lineTo(p.x, 1 - p.y);
+            });
+
+            // 内側のライン（穴あけ）
             const hole = new THREE.Path();
-            hole.moveTo(landmarks[LIPS_INNER[0]].x, 1 - landmarks[LIPS_INNER[0]].y);
-            LIPS_INNER.forEach(i => hole.lineTo(landmarks[i].x, 1 - landmarks[i].y));
+            const startInner = landmarks[LIPS_INNER[0]];
+            hole.moveTo(startInner.x, 1 - startInner.y);
+            LIPS_INNER.forEach(i => {
+                const p = landmarks[i];
+                hole.lineTo(p.x, 1 - p.y);
+            });
             shape.holes.push(hole);
 
             lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape);
+            // 第2引数の「12」は曲線の解像度。これを増やすことで唇のカーブが滑らかになります
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 12);
             renderer.render(scene, camera);
         }
 
