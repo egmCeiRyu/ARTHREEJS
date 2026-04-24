@@ -169,11 +169,9 @@
             video.requestVideoFrameCallback(loop);
         }
 
-        function updateLips(landmarks) {
+function updateLips(landmarks) {
             lipMesh.visible = true;
 
-            // --- 1. SUAVIZAÇÃO DE MOVIMENTO ---
-            // Aumente para 0.95 para seguir o rosto mais rápido. Diminua para 0.7 para ser mais lento.
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
@@ -185,24 +183,35 @@
             const center = smoothed[13];
             const shape = new THREE.Shape();
 
-            // --- 2. REGULAGEM DO CONTORNO EXTERNO (BORDA) ---
+            // --- 2. PAINEL DE CONTROLE DO SHAPE EXTERNO ---
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
 
-                // LARGURA DA BOCA: Aumente o sX (ex: 1.2) para esticar mais para os lados.
-                let sX = 1.08;
+                let sX = 1.12; // LARGURA TOTAL: (Estica os cantos para os lados)
+                let sY = 1.00; // ALTURA BASE: (Volume geral)
 
-                // ALTURA GERAL: Aumente o sY (ex: 1.1) para deixar os lábios mais grossos.
-                let sY = 0.80;
+                // --- CONTROLE INDIVIDUAL POR PONTO ---
+                
+                // 1. ARCO DO CUPIDO (Pontos superiores centrais)
+                // Aumente para 1.05+ para CONVEXO (subir) | Diminua para 0.95- para CÔNCAVO (descer)
+                if (id === 37 || id === 0 || id === 267) {
+                    sY = 0.98; 
+                }
 
-                // ARCO DO CUPIDO (TOPO): Diminua (ex: 0.98) para descer a cor e não subir na pele.
-                if (id === 37 || id === 0 || id === 267) sY = 0.98;
+                // 2. BASE INFERIOR (Ponto central de baixo)
+                // Aumente para 1.10+ para deixar o lábio de baixo mais "caído/volumoso"
+                if (id === 17) {
+                    sY = 1.02;
+                }
 
-                // LÁBIO INFERIOR (BASE): Diminua (ex: 0.98) para levantar a cor e não descer no queixo.
-                if (id === 17) sY = 0.98;
+                // 3. LATERAIS SUPERIORES (As "asas" do lábio de cima)
+                if (id === 185 || id === 40 || id === 269 || id === 270) {
+                    sY = 1.00;
+                }
 
                 const x = center.x + (p.x - center.x) * sX;
                 const y = center.y + (p.y - center.y) * sY;
+                
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
             });
@@ -212,25 +221,22 @@
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
 
-                // LARGURA DO FURO: Deve ser igual ao sX do contorno acima.
-                let sX_inner = 1.05;
-
-                // LIMPEZA DOS DENTES: Aumente este sY (ex: 1.08 ou 1.10) para remover a cor dos dentes.
-                let sY_inner = 1.05;
+                let sX_inner = 1.12; // Deve acompanhar o sX externo
+                let sY_inner = 1.08; // LIMPEZA: Aumente para "empurrar" o batom para fora dos dentes
 
                 const x = center.x + (p.x - center.x) * sX_inner;
                 const y = center.y + (p.y - center.y) * sY_inner;
+                
                 if (i === 0) hole.moveTo(x, 1 - y);
                 else hole.lineTo(x, 1 - y);
             });
             shape.holes = [hole];
 
-            // --- 4. QUALIDADE DO SHAPE ---
-            // Mude de 8 para 12 se quiser bordas mais arredondadas e suaves*(SUBDIVISOES).
+            // --- 4. QUALIDADE E RENDERIZAÇÃO ---
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 16);
+            // Subdivisões: 16 para curvas suaves, 32 para perfeição total
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 24);
 
-            // Mapeamento UV e renderização final
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
             const size = new THREE.Vector3(); bBox.getSize(size);
