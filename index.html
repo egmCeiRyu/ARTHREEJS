@@ -198,6 +198,30 @@
                 else shape.lineTo(x, 1 - y);
             });
 
+            OUTER.forEach((id, i) => {
+                const p = smoothed[id];
+                let sY = 1.02; // Escala padrão
+
+                // AJUSTE DO TOPO (Arco do Cupido)
+                if (id === 37 || id === 0 || id === 267) {
+                    sY = 1.0; // Valor que você definiu para o limite natural
+                }
+
+                // AJUSTE DA BASE (Lábio Inferior - Ponto Central)
+                if (id === 17) {
+                    sY = 1.05;
+                    // 1.0  = Limite real do lábio (Natural)
+                    // 1.10 = Aumenta o volume (empurra para baixo na pele)
+                    // 0.95 = Diminui o lábio (puxa para dentro da boca)
+                }
+
+                const x = center.x + (p.x - center.x) * 1.15;
+                const y = center.y + (p.y - center.y) * sY;
+
+                if (i === 0) shape.moveTo(x, 1 - y);
+                else shape.lineTo(x, 1 - y);
+            });
+
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
