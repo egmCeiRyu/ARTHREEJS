@@ -6,193 +6,123 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        :root {
-            --accent: #ff4d6d;
-        }
-
-        body {
-            margin: 0;
-            background: #050505;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            font-family: 'Hiragino Sans', sans-serif;
-        }
-
-        #container {
-            position: relative;
-            width: 640px;
-            height: 480px;
-            border-radius: 20px;
-            overflow: hidden;
-            border: 2px solid #333;
-        }
-
-        video, #three_container {
-            position: absolute;
-            width: 640px;
-            height: 480px;
-            transform: scaleX(-1);
-        }
-
-        .ui-panel {
-            margin-top: 20px;
-            background: rgba(25, 25, 25, 0.95);
-            padding: 25px;
-            border-radius: 25px;
-            width: 580px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            border: 1px solid #444;
-        }
-
-        .swatches {
-            display: flex;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-
-        .swatch {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 3px solid transparent;
-            transition: 0.2s;
-        }
-
-            .swatch.active {
-                border-color: white;
-                transform: scale(1.1);
-            }
-
-        input[type=range] {
-            width: 100%;
-            accent-color: var(--accent);
-            cursor: pointer;
-        }
-
-        .labels {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-            font-size: 11px;
-            color: #666;
-            margin-top: 8px;
-        }
+        :root { --accent: #ff4d6d; }
+        body { margin: 0; background: #050505; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Hiragino Sans', sans-serif; }
+        #container { position: relative; width: 640px; height: 480px; border-radius: 20px; overflow: hidden; border: 2px solid #333; }
+        video, #three_container { position: absolute; width: 640px; height: 480px; transform: scaleX(-1); }
+        .ui-panel { margin-top: 20px; background: rgba(25, 25, 25, 0.95); padding: 25px; border-radius: 25px; width: 580px; display: flex; flex-direction: column; align-items: center; border: 1px solid #444; }
+        .swatches { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
+        .swatch { width: 42px; height: 42px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: 0.2s; }
+        .swatch.active { border-color: white; transform: scale(1.1); }
+        input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+        .labels { display: flex; justify-content: space-between; width: 100%; font-size: 11px; color: #666; margin-top: 8px; }
     </style>
 </head>
 <body>
 
-    <div id="container">
-        <video id="webcam" autoplay playsinline></video>
-        <div id="three_container"></div>
-    </div>
+<div id="container">
+    <video id="webcam" autoplay playsinline></video>
+    <div id="three_container"></div>
+</div>
 
-    <div class="ui-panel">
-        <div class="swatches">
-            <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
-            <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
-            <div class="swatch" style="background: #f28b82;" onclick="changeColor(0xf28b82, this)"></div>
-            <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
-            <div class="swatch" style="background: #333333;" onclick="changeColor(0x333333, this)"></div>
-        </div>
-        <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.7" oninput="updateOpacity(this.value)">
-        <div class="labels"><span>スクリーン強度：弱</span><span id="int-val">70%</span><span>強</span></div>
-    </div>
+<div class="ui-panel">
+    <div class="swatches">
+        <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
+        <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
+        <div class="swatch" style="background: #f28b82;" onclick="changeColor(0xf28b82, this)"></div>
+        <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
+        <div class="swatch" style="background: #333333;" onclick="changeColor(0x333333, this)"></div> </div>
+    <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.7" oninput="updateOpacity(this.value)">
+    <div class="labels"><span>スクリーン強度：弱</span><span id="int-val">70%</span><span>強</span></div>
+</div>
 
-    <script type="module">
-        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+<script type="module">
+    import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
-        const video = document.getElementById("webcam");
-        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
-        let lastVideoTime = -1;
+    const video = document.getElementById("webcam");
+    let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
+    let lastVideoTime = -1;
 
-        const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
-        const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+    const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
+    const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
 
-        async function init() {
-            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
-            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
-                runningMode: "VIDEO", numFaces: 1
-            });
+    async function init() {
+        const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+            baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
+            runningMode: "VIDEO", numFaces: 1
+        });
 
-            scene = new THREE.Scene();
-            camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
-            camera.position.z = 1;
+        scene = new THREE.Scene();
+        camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
+        camera.position.z = 1;
 
-            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-            renderer.setSize(640, 480);
-            document.getElementById('three_container').appendChild(renderer.domElement);
+        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(640, 480);
+        document.getElementById('three_container').appendChild(renderer.domElement);
 
-            // --- Photoshopの「スクリーン」モードを再現する設定 ---
-            lipMaterial = new THREE.MeshBasicMaterial({
-                color: 0xbe1e2d,
-                transparent: true,
-                opacity: 0.7,
-                blending: THREE.CustomBlending,
-                blendEquation: THREE.AddEquation,
-                blendSrc: THREE.OneMinusDstColorFactor, // 1 - Dest
-                blendDst: THREE.OneFactor              // + 1
-                // これにより Photoshopのスクリーンに近い合成が行われます
-            });
+        // --- Photoshopの「スクリーン」モードを再現する設定 ---
+        lipMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xbe1e2d, 
+            transparent: true, 
+            opacity: 0.7,
+            blending: THREE.CustomBlending,
+            blendEquation: THREE.AddEquation,
+            blendSrc: THREE.OneMinusDstColorFactor, // 1 - Dest
+            blendDst: THREE.OneFactor              // + 1
+            // これにより Photoshopのスクリーンに近い合成が行われます
+        });
+        
+        lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
+        scene.add(lipMesh);
+        startCamera();
+    }
 
-            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
-            scene.add(lipMesh);
-            startCamera();
-        }
+    function startCamera() {
+        navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then((stream) => {
+            video.srcObject = stream;
+            video.addEventListener("loadeddata", () => predictWebcam());
+        });
+    }
 
-        function startCamera() {
-            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then((stream) => {
-                video.srcObject = stream;
-                video.addEventListener("loadeddata", () => predictWebcam());
-            });
-        }
-
-        async function predictWebcam() {
-            if (lastVideoTime !== video.currentTime) {
-                lastVideoTime = video.currentTime;
-                const results = faceLandmarker.detectForVideo(video, performance.now());
-                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    updateVisuals(results.faceLandmarks[0]);
-                }
+    async function predictWebcam() {
+        if (lastVideoTime !== video.currentTime) {
+            lastVideoTime = video.currentTime;
+            const results = faceLandmarker.detectForVideo(video, performance.now());
+            if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+                updateVisuals(results.faceLandmarks[0]);
             }
-            window.requestAnimationFrame(predictWebcam);
         }
+        window.requestAnimationFrame(predictWebcam);
+    }
 
-        window.changeColor = (hex, el) => {
-            lipMaterial.color.setHex(hex);
-            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-            el.classList.add('active');
-        };
+    window.changeColor = (hex, el) => {
+        lipMaterial.color.setHex(hex);
+        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+    };
 
-        window.updateOpacity = (val) => {
-            lipMaterial.opacity = val;
-            document.getElementById('int-val').innerText = Math.round(val * 100) + "%";
-        };
+    window.updateOpacity = (val) => {
+        lipMaterial.opacity = val;
+        document.getElementById('int-val').innerText = Math.round(val * 100) + "%";
+    };
 
-        function updateVisuals(landmarks) {
-            const shape = new THREE.Shape();
-            shape.moveTo(landmarks[LIPS_OUTER[0]].x, 1 - landmarks[LIPS_OUTER[0]].y);
-            LIPS_OUTER.forEach(i => shape.lineTo(landmarks[i].x, 1 - landmarks[i].y));
+    function updateVisuals(landmarks) {
+        const shape = new THREE.Shape();
+        shape.moveTo(landmarks[LIPS_OUTER[0]].x, 1 - landmarks[LIPS_OUTER[0]].y);
+        LIPS_OUTER.forEach(i => shape.lineTo(landmarks[i].x, 1 - landmarks[i].y));
 
-            const hole = new THREE.Path();
-            hole.moveTo(landmarks[LIPS_INNER[0]].x, 1 - landmarks[LIPS_INNER[0]].y);
-            LIPS_INNER.forEach(i => hole.lineTo(landmarks[i].x, 1 - landmarks[i].y));
-            shape.holes.push(hole);
+        const hole = new THREE.Path();
+        hole.moveTo(landmarks[LIPS_INNER[0]].x, 1 - landmarks[LIPS_INNER[0]].y);
+        LIPS_INNER.forEach(i => hole.lineTo(landmarks[i].x, 1 - landmarks[i].y));
+        shape.holes.push(hole);
 
-            lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape);
-            renderer.render(scene, camera);
-        }
+        lipMesh.geometry.dispose();
+        lipMesh.geometry = new THREE.ShapeGeometry(shape);
+        renderer.render(scene, camera);
+    }
 
-        init();
-    </script>
+    init();
+</script>
 </body>
 </html>
