@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Ultra Real-Time</title>
+    <title>AR Lipstick - Professional Palette</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root { --accent: #ff4d6d; }
         body { margin: 0; background: #000; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #fff; }
         #container { position: relative; width: 640px; height: 480px; border-radius: 30px; overflow: hidden; border: 1px solid #333; }
         video, #three_container { position: absolute; width: 100%; height: 100%; transform: scaleX(-1); object-fit: cover; }
-        .ui-panel { margin-top: 20px; background: rgba(15,15,15,.9); padding: 20px; border-radius: 20px; width: 500px; border: 1px solid #444; backdrop-filter: blur(10px); }
-        .swatches { display: flex; gap: 10px; margin-bottom: 15px; justify-content: center; }
-        .swatch { width: 35px; height: 35px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.2s; }
+        .ui-panel { margin-top: 20px; background: rgba(15,15,15,.9); padding: 20px; border-radius: 20px; width: 550px; border: 1px solid #444; backdrop-filter: blur(10px); }
+        .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 15px; justify-items: center; }
+        .swatch { width: 40px; height: 40px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .swatch.active { border-color: #fff; transform: scale(1.15); }
         input[type=range] { width: 100%; accent-color: var(--accent); }
+        label { font-size: 11px; color: #888; display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
 <body>
@@ -25,18 +26,19 @@
     </div>
 
     <div class="ui-panel">
+        <label>Coleção Professional Matte & Gloss</label>
         <div class="swatches">
-            <div class="swatch active" style="background:#39be1e" onclick="changeColor(0x39be1e,this)"></div>
-            <div class="swatch" style="background:#07aaeb" onclick="changeColor(0x07aaeb,this)"></div>
-            <div class="swatch" style="background:#babd11" onclick="changeColor(0xbabd11,this)"></div>
-            <div class="swatch" style="background:#be1eb1" onclick="changeColor(0xbe1eb1,this)"></div>
-            
-            <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
-            <div class="swatch" style="background:#c2185b" onclick="changeColor(0xc2185b,this)"></div>
+            <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
+            <div class="swatch" style="background:#a67c7c" onclick="changeColor(0xa67c7c,this)"></div>
             <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
+            <div class="swatch" style="background:#c2185b" onclick="changeColor(0xc2185b,this)"></div>
+            <div class="swatch" style="background:#ff8b6a" onclick="changeColor(0xff8b6a,this)"></div>
+            <div class="swatch" style="background:#5e1e5e" onclick="changeColor(0x5e1e5e,this)"></div>
+            <div class="swatch" style="background:#964b00" onclick="changeColor(0x964b00,this)"></div>
             <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
         </div>
-        <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.45" oninput="updateOpacity(this.value)">
+        <label>Opacidade / Intensidade</label>
+        <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.75" oninput="updateOpacity(this.value)">
     </div>
 
     <script type="module">
@@ -56,33 +58,30 @@
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
                 baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
-                runningMode: "VIDEO", numFaces: 1,
-                minFaceDetectionConfidence: 0.5,
-                minFacePresenceConfidence: 0.5,
-                minTrackingConfidence: 0.5
+                runningMode: "VIDEO", numFaces: 1
             });
 
             scene = new THREE.Scene();
             camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
             camera.position.z = 1;
 
-            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false }); // Antialias false para ganhar performance
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(640, 480);
-            renderer.setPixelRatio(1); // Trava o pixel ratio para evitar sobrecarga de GPU
+            renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
             lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
                 side: THREE.DoubleSide,
-                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.65 } },
+                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.75 } },
                 vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
                 fragmentShader: `
                     uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
                     void main() {
-                        float mask = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.85, vUv.x);
-                        float occ = mix(0.7, 1.0, smoothstep(0.0, 0.4, abs(vUv.y - 0.5)));
-                        float g1 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.0), 5.0) * 0.4;
-                        float g2 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 3.0), 5.0) * 0.4;
+                        float mask = smoothstep(0.0, 0.12, vUv.x) * smoothstep(1.0, 0.88, vUv.x);
+                        float occ = mix(0.75, 1.0, smoothstep(0.0, 0.45, abs(vUv.y - 0.5)));
+                        float g1 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.0), 6.0) * 0.45;
+                        float g2 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 3.5), 6.0) * 0.40;
                         gl_FragColor = vec4(uColor * occ + vec3(g1 + g2), uOpacity * mask);
                     }
                 `
@@ -100,17 +99,15 @@
         }
 
         function loop() {
-            const now = performance.now();
             if (video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
-                const result = faceLandmarker.detectForVideo(video, now);
+                const result = faceLandmarker.detectForVideo(video, performance.now());
                 if (result.faceLandmarks?.[0]) updateLips(result.faceLandmarks[0]);
             }
             video.requestVideoFrameCallback(loop);
         }
 
         function updateLips(landmarks) {
-            // ALPHA aumentado para 0.95: Resposta quase instantânea (Real-Time Puro)
             const ALPHA = 0.95; 
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
@@ -140,7 +137,6 @@
             lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
             lipMesh.geometry.computeVertexNormals();
             lipMesh.geometry.attributes.position.needsUpdate = true;
-            
             renderer.render(scene, camera);
         }
 
