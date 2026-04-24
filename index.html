@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Lipstick Pro</title>
+    <title>AR Lipstick Fast</title>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -22,7 +22,7 @@
             justify-content: center;
             height: 100vh;
             font-family: 'Segoe UI',system-ui,sans-serif;
-            color: white;
+            color: #fff;
         }
 
         #container {
@@ -44,7 +44,6 @@
             object-fit: cover;
         }
 
-        /* UI ORIGINAL */
         .ui-panel {
             margin-top: 25px;
             background: rgba(20,20,20,.95);
@@ -63,13 +62,11 @@
             color: #888;
             margin-bottom: 15px;
             font-weight: bold;
-            text-transform: uppercase;
             letter-spacing: 1px;
         }
 
         .swatches {
             display: flex;
-            justify-content: center;
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -84,30 +81,25 @@
         }
 
             .swatch.active {
-                border-color: white;
+                border-color: #fff;
                 transform: scale(1.1);
                 box-shadow: 0 0 15px rgba(255,255,255,.2);
             }
 
         .slider-container {
             width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
         }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
-            cursor: pointer;
             height: 6px;
-            border-radius: 5px;
+            cursor: pointer;
         }
 
         .labels {
             display: flex;
             justify-content: space-between;
-            width: 100%;
             font-size: 10px;
             color: #666;
             margin-top: 8px;
@@ -119,7 +111,7 @@
 <body>
 
     <div id="container">
-        <video id="webcam" autoplay playsinline></video>
+        <video id="webcam" autoplay playsinline muted></video>
         <div id="three_container"></div>
     </div>
 
@@ -146,7 +138,10 @@
 
     <script type="module">
 
-        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+        import {
+            FaceLandmarker,
+            FilesetResolver
+        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
         const video = document.getElementById("webcam");
 
@@ -162,18 +157,20 @@
 
         async function init() {
 
-            const filesetResolver = await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-            );
+            const filesetResolver =
+                await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+                );
 
-            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: {
-                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                numFaces: 1
-            });
+            faceLandmarker =
+                await FaceLandmarker.createFromOptions(filesetResolver, {
+                    baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                        delegate: "GPU"
+                    },
+                    runningMode: "VIDEO",
+                    numFaces: 1
+                });
 
             scene = new THREE.Scene();
 
@@ -188,23 +185,23 @@
             renderer.setSize(640, 480);
             renderer.setPixelRatio(1);
 
-            document.getElementById("three_container").appendChild(renderer.domElement);
+            document.getElementById("three_container")
+                .appendChild(renderer.domElement);
 
-            /* MATERIAL PRO */
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
                 opacity: 0.45,
                 side: THREE.DoubleSide,
                 depthWrite: false,
-
-                blending: THREE.CustomBlending,
-                blendEquation: THREE.AddEquation,
-                blendSrc: THREE.SrcAlphaFactor,
-                blendDst: THREE.OneMinusSrcAlphaFactor
+                blending: THREE.NormalBlending
             });
 
-            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
+            lipMesh = new THREE.Mesh(
+                new THREE.BufferGeometry(),
+                lipMaterial
+            );
+
             scene.add(lipMesh);
 
             startCamera();
@@ -226,40 +223,28 @@
             });
         }
 
-        let frameSkip = 0;
-        let lastDetect = null;
-
         function loop() {
 
             if (video.currentTime !== lastVideoTime) {
 
                 lastVideoTime = video.currentTime;
-                frameSkip++;
 
-                /* DETECTA SOMENTE METADE DOS FRAMES */
-                if (frameSkip % 2 === 0) {
+                const result =
+                    faceLandmarker.detectForVideo(
+                        video,
+                        performance.now()
+                    );
 
-                    const result =
-                        faceLandmarker.detectForVideo(video, performance.now());
+                if (result.faceLandmarks &&
+                    result.faceLandmarks[0]) {
 
-                    if (result.faceLandmarks && result.faceLandmarks[0]) {
-
-                        lastDetect = result.faceLandmarks[0];
-                        updateLips(lastDetect);
-
-                    } else {
-
-                        lipMesh.visible = false;
-                    }
+                    updateLips(result.faceLandmarks[0]);
 
                 } else {
 
-                    /* ENTRE FRAMES: reaproveita último tracking */
-                    if (lastDetect) {
-                        updateLips(lastDetect);
-                    } else {
-                        renderer.render(scene, camera);
-                    }
+                    lipMesh.visible = false;
+                    renderer.render(scene, camera);
+
                 }
             }
 
@@ -269,23 +254,37 @@
         function smooth(landmarks) {
 
             if (!smoothed) {
-                smoothed = landmarks.map(p => ({ x: p.x, y: p.y, z: p.z }));
+                smoothed = landmarks.map(p => ({
+                    x: p.x,
+                    y: p.y,
+                    z: p.z
+                }));
                 return;
             }
 
             for (let i = 0; i < landmarks.length; i++) {
 
-                let dx = Math.abs(landmarks[i].x - smoothed[i].x);
-                let dy = Math.abs(landmarks[i].y - smoothed[i].y);
+                const dx =
+                    Math.abs(landmarks[i].x - smoothed[i].x);
 
-                let speed = dx + dy;
-                let factor = speed > 0.01 ? 0.82 : 0.42;
+                const dy =
+                    Math.abs(landmarks[i].y - smoothed[i].y);
 
-                smoothed[i].x += (landmarks[i].x - smoothed[i].x) * factor;
-                smoothed[i].y += (landmarks[i].y - smoothed[i].y) * factor;
+                const speed = dx + dy;
+
+                const factor =
+                    speed > 0.01 ? 0.72 : 0.28;
+
+                smoothed[i].x +=
+                    (landmarks[i].x - smoothed[i].x) * factor;
+
+                smoothed[i].y +=
+                    (landmarks[i].y - smoothed[i].y) * factor;
             }
         }
-        let geoFrame = 0;
+
+        let prevX = 0;
+        let prevY = 0;
 
         function updateLips(landmarks) {
 
@@ -293,9 +292,16 @@
 
             smooth(landmarks);
 
-            geoFrame++;
+            const center = smoothed[13];
 
-            if (geoFrame % 3 !== 0) {
+            const move =
+                Math.abs(center.x - prevX) +
+                Math.abs(center.y - prevY);
+
+            prevX = center.x;
+            prevY = center.y;
+
+            if (move < 0.0015) {
                 renderer.render(scene, camera);
                 return;
             }
@@ -304,45 +310,52 @@
 
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
-                if (i === 0) shape.moveTo(p.x, 1 - p.y);
-                else shape.lineTo(p.x, 1 - p.y);
+
+                if (i === 0)
+                    shape.moveTo(p.x, 1 - p.y);
+                else
+                    shape.lineTo(p.x, 1 - p.y);
             });
 
             const hole = new THREE.Path();
 
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
-                if (i === 0) hole.moveTo(p.x, 1 - p.y);
-                else hole.lineTo(p.x, 1 - p.y);
+
+                if (i === 0)
+                    hole.moveTo(p.x, 1 - p.y);
+                else
+                    hole.lineTo(p.x, 1 - p.y);
             });
 
             shape.holes = [hole];
 
-            if (lipMesh.geometry) lipMesh.geometry.dispose();
+            if (lipMesh.geometry)
+                lipMesh.geometry.dispose();
 
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 1);
+            lipMesh.geometry =
+                new THREE.ShapeGeometry(shape, 1);
 
             renderer.render(scene, camera);
         }
-
-        /* UI ORIGINAL */
 
         window.changeColor = (hex, el) => {
 
             lipMaterial.color.setHex(hex);
 
-            document.querySelectorAll('.swatch').forEach(s => {
-                s.classList.remove('active');
-            });
+            document.querySelectorAll(".swatch")
+                .forEach(s => s.classList.remove("active"));
 
-            el.classList.add('active');
-        }
+            el.classList.add("active");
+        };
 
         window.updateOpacity = (v) => {
 
             lipMaterial.opacity = v;
-            document.getElementById("int-val").innerText = Math.round(v * 100) + "%";
-        }
+
+            document.getElementById("int-val")
+                .innerText = Math.round(v * 100) + "%";
+        };
 
         init();
 
