@@ -3,10 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>ARリップシミュレーター - プレシジョン</title>
-
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
     <style>
         :root {
             --accent: #ff4d6d;
@@ -118,7 +116,6 @@
 
     <div class="ui-panel">
         <div class="ui-title">リップカラーを選択</div>
-
         <div class="swatches">
             <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
             <div class="swatch" style="background: #8e2a4e;" onclick="changeColor(0x8e2a4e, this)"></div>
@@ -129,8 +126,8 @@
         </div>
 
         <div class="slider-container">
-            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
-            <div class="labels"><span>ナチュラル</span><span id="int-val">60%</span><span>ビビッド</span></div>
+            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.5" oninput="updateOpacity(this.value)">
+            <div class="labels"><span>ナチュラル</span><span id="int-val">50%</span><span>ビビッド</span></div>
         </div>
     </div>
 
@@ -138,11 +135,9 @@
         import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
         const video = document.getElementById("webcam");
-        let faceLandmarker;
-        let scene, camera, renderer, lipMesh, lipMaterial;
+        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
         let lastVideoTime = -1;
 
-        // ランドマークインデックス
         const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
         const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
 
@@ -153,8 +148,7 @@
                     modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
                     delegate: "GPU"
                 },
-                runningMode: "VIDEO",
-                numFaces: 1
+                runningMode: "VIDEO", numFaces: 1
             });
 
             scene = new THREE.Scene();
@@ -165,17 +159,17 @@
             renderer.setSize(640, 480);
             document.getElementById('three_container').appendChild(renderer.domElement);
 
-            // シンプルで確実なマテリアル設定に変更
+            // Melhora técnica: Modo de mistura que respeita a textura da boca
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.6,
-                side: THREE.DoubleSide
+                opacity: 0.5,
+                side: THREE.DoubleSide,
+                blending: THREE.MultiplyBlending // Preserva as ranhuras escuras dos lábios
             });
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
-
             startCamera();
         }
 
@@ -199,6 +193,23 @@
 
         window.changeColor = (hex, el) => {
             lipMaterial.color.setHex(hex);
+
+            // --- Lógica de Correção para Cores Claras ---
+            const r = (hex >> 16) & 255;
+            const g = (hex >> 8) & 255;
+            const b = hex & 255;
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+            if (brightness > 140) {
+                // Se a cor for clara (ex: rosa, coral), muda para Normal Blending
+                // e reduz a opacidade para misturar melhor com a pele
+                lipMaterial.blending = THREE.NormalBlending;
+                if (lipMaterial.opacity > 0.5) lipMaterial.opacity = 0.45;
+            } else {
+                // Se a cor for escura ou preto, usa Multiply para realismo
+                lipMaterial.blending = THREE.MultiplyBlending;
+            }
+
             document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
             el.classList.add('active');
         };
