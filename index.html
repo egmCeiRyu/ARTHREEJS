@@ -2,9 +2,11 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ARリップ - 高彩度エディション</title>
+    <title>AR Makeup Pro - Precision Fill & Arched Lips</title>
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <style>
         :root {
             --accent: #ff4d6d;
@@ -13,22 +15,25 @@
         body {
             margin: 0;
             background: #050505;
-            color: white;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             font-family: 'Hiragino Sans', sans-serif;
+            color: white;
         }
 
         #container {
             position: relative;
             width: 640px;
             height: 480px;
+            background: #000;
             border-radius: 20px;
             overflow: hidden;
             border: 2px solid #333;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
         }
 
         video, #three_container {
@@ -36,6 +41,7 @@
             width: 640px;
             height: 480px;
             transform: scaleX(-1);
+            object-fit: cover;
         }
 
         .ui-panel {
@@ -48,6 +54,15 @@
             flex-direction: column;
             align-items: center;
             border: 1px solid #444;
+            backdrop-filter: blur(10px);
+        }
+
+        .ui-title {
+            font-size: 13px;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 15px;
+            font-weight: bold;
         }
 
         .swatches {
@@ -55,6 +70,7 @@
             justify-content: center;
             gap: 12px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         .swatch {
@@ -63,18 +79,28 @@
             border-radius: 50%;
             cursor: pointer;
             border: 3px solid transparent;
-            transition: 0.2s;
+            transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
             .swatch.active {
                 border-color: white;
                 transform: scale(1.15);
+                box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
             }
+
+        .slider-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
             cursor: pointer;
+            height: 6px;
+            border-radius: 5px;
         }
 
         .labels {
@@ -84,6 +110,8 @@
             font-size: 11px;
             color: #666;
             margin-top: 8px;
+            font-weight: bold;
+            letter-spacing: 1px;
         }
     </style>
 </head>
@@ -95,16 +123,19 @@
     </div>
 
     <div class="ui-panel">
-        <div class="ui-title" style="font-size:12px; color:#888; margin-bottom:10px;">リップカラーを選択</div>
+        <div class="ui-title">リップカラーを選択してください</div>
         <div class="swatches">
             <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
+            <div class="swatch" style="background: #8e2a4e;" onclick="changeColor(0x8e2a4e, this)"></div>
             <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
             <div class="swatch" style="background: #f28b82;" onclick="changeColor(0xf28b82, this)"></div>
             <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
             <div class="swatch" style="background: #000000;" onclick="changeColor(0x000000, this)"></div>
         </div>
-        <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.8" oninput="updateOpacity(this.value)">
-        <div class="labels"><span>薄く</span><span id="int-val">80%</span><span>濃く</span></div>
+        <div class="slider-container">
+            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.5" oninput="updateOpacity(this.value)">
+            <div class="labels"><span>ナチュラル</span><span id="int-val">50%</span><span>ビビッド</span></div>
+        </div>
     </div>
 
     <script type="module">
@@ -115,9 +146,14 @@
         let lastVideoTime = -1;
         let smoothedLandmarks = null;
 
-        // 高精度インデックス
-        const LIPS_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 408, 291, 321, 405, 314, 17, 84, 181, 91, 146, 61];
-        const LIPS_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
+        // --- REPARO DE GEOMETRIA (Preenchimento Total & Arched) ---
+        // A lista foi unificada para desenhar um polígono fechado sem furo interno.
+        // Os índices foram reordenados para garantir que o contorno inferior siga
+        // a anatomia e crie o formato "arched" suave e definido.
+        const LIPS_OUTER_DETAILED = [
+            61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408,
+            270, 269, 267, 0, 37, 39, 40, 185, 61
+        ];
 
         async function init() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
@@ -132,13 +168,13 @@
 
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(640, 480);
+            renderer.setPixelRatio(1);
             document.getElementById('three_container').appendChild(renderer.domElement);
 
-            // 高彩度マテリアル設定（NormalBlendingで色をしっかり出す）
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.8,
+                opacity: 0.5,
                 side: THREE.DoubleSide
             });
 
@@ -177,28 +213,28 @@
         };
 
         function updateVisuals(landmarks) {
+            // Suavização Temporal (Reduz o tremor)
             if (!smoothedLandmarks) smoothedLandmarks = landmarks;
-            else {
-                smoothedLandmarks = landmarks.map((p, i) => ({
-                    x: smoothedLandmarks[i].x * 0.5 + p.x * 0.5,
-                    y: smoothedLandmarks[i].y * 0.5 + p.y * 0.5
-                }));
-            }
+            else smoothedLandmarks = landmarks.map((p, i) => ({
+                x: smoothedLandmarks[i].x * 0.75 + p.x * 0.25,
+                y: smoothedLandmarks[i].y * 0.75 + p.y * 0.25
+            }));
 
-            // yOffsetの微調整：さらに正確にフィットさせる
-            const yOffset = 0.003;
+            // --- REPARO DE ANATOMIA: Preenchimento Total e Arched ---
+            const mouthShape = new THREE.Shape();
+            const startOuter = smoothedLandmarks[LIPS_OUTER_DETAILED[0]];
+            mouthShape.moveTo(startOuter.x, 1 - startOuter.y);
 
-            const shape = new THREE.Shape();
-            shape.moveTo(smoothedLandmarks[LIPS_OUTER[0]].x, 1 - (smoothedLandmarks[LIPS_OUTER[0]].y + yOffset));
-            LIPS_OUTER.forEach(i => shape.lineTo(smoothedLandmarks[i].x, 1 - (smoothedLandmarks[i].y + yOffset)));
+            // Percorre o contorno unificado. Note que não adicionamos 'holes' (buracos).
+            LIPS_OUTER_DETAILED.forEach(idx => {
+                const p = smoothedLandmarks[idx];
+                mouthShape.lineTo(p.x, 1 - p.y);
+            });
 
-            const hole = new THREE.Path();
-            hole.moveTo(smoothedLandmarks[LIPS_INNER[0]].x, 1 - (smoothedLandmarks[LIPS_INNER[0]].y + yOffset));
-            LIPS_INNER.forEach(i => hole.lineTo(smoothedLandmarks[i].x, 1 - (smoothedLandmarks[i].y + yOffset)));
-            shape.holes.push(hole);
-
+            // Atualizar malha com geometria suave e subdividida
             lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 16);
+            lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 12); // Resolução 12 para curvas suaves
+
             renderer.render(scene, camera);
         }
 
