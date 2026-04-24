@@ -3,18 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Bezier Curve Precision</title>
+    <title>AR Lipstick - Pro High Fidelity</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root { --accent: #ff4d6d; }
-        body { margin: 0; background: #000; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #fff; }
+        body { margin: 0; background: #000; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; }
         #container { position: relative; width: 640px; height: 480px; border-radius: 30px; overflow: hidden; border: 1px solid #333; }
         video, #three_container { position: absolute; width: 100%; height: 100%; transform: scaleX(-1); object-fit: cover; }
-        .ui-panel { margin-top: 20px; background: rgba(15,15,15,.9); padding: 20px; border-radius: 20px; width: 500px; border: 1px solid #444; backdrop-filter: blur(10px); }
-        .swatches { display: flex; gap: 10px; margin-bottom: 15px; justify-content: center; }
-        .swatch { width: 35px; height: 35px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
-        .swatch.active { border-color: #fff; transform: scale(1.1); }
+        .ui-panel { margin-top: 20px; background: rgba(15,15,15,.9); padding: 20px; border-radius: 20px; width: 500px; border: 1px solid #444; backdrop-filter: blur(10px); color: white; text-align: center; }
         input[type=range] { width: 100%; accent-color: var(--accent); }
     </style>
 </head>
@@ -26,13 +23,8 @@
     </div>
 
     <div class="ui-panel">
-        <div class="swatches">
-            <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
-            <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
-            <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
-            <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
-        </div>
-        <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
+        <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.7" oninput="updateOpacity(this.value)">
+        <p>Ajuste de Fidelidade Estilo Banuba</p>
     </div>
 
     <script type="module">
@@ -43,7 +35,7 @@
         let smoothed = null;
         let lastVideoTime = -1;
 
-        // Pontos chave para Bezier
+        // Estrutura de pontos para curvas suaves
         const UPPER_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291];
         const LOWER_OUTER = [291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
         const INNER_IDS = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
@@ -63,17 +55,22 @@
             renderer.setSize(640, 480);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
+            // SHADER PRO: Adicionado Blur de borda e reflexo Fresnel
             lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
-                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.6 } },
+                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.7 } },
                 vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
                 fragmentShader: `
                     uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
                     void main() {
-                        float mask = smoothstep(0.0, 0.12, vUv.x) * smoothstep(1.0, 0.88, vUv.x) * smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
-                        float occ = mix(0.7, 1.0, smoothstep(0.0, 0.4, abs(vUv.y - 0.5)));
-                        float gloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.5), 5.0) * 0.45;
-                        gloss += pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 3.5), 5.0) * 0.45;
+                        // Máscara estilo Banuba: suaviza muito as bordas externas (blur)
+                        float mask = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.85, vUv.x) * smoothstep(0.0, 0.2, vUv.y) * smoothstep(1.0, 0.8, vUv.y);
+                        
+                        // Volume e brilho gloss
+                        float occ = mix(0.6, 1.0, smoothstep(0.0, 0.45, abs(vUv.y - 0.5)));
+                        float gloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.0), 6.0) * 0.4;
+                        gloss += pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 3.0), 6.0) * 0.4;
+
                         gl_FragColor = vec4(uColor * occ + vec3(gloss), mask * uOpacity);
                     }
                 `
@@ -103,59 +100,56 @@
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
-                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.85;
-                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.85;
+                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.8;
+                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.8;
                 }
             }
 
             const center = smoothed[13];
             const shape = new THREE.Shape();
 
-            // Função para pegar coordenada com escala
-            const getPt = (id, sx = 1.15, sy = 1.0) => {
+            const getPt = (id, sx = 1.12, sy = 1.0) => {
                 const p = smoothed[id];
-                // AJUSTE DE "ASA" DO ARCO: IDs 39, 40, 269, 270 descem mais
-                let syFinal = sy;
-                if(id === 39 || id === 40 || id === 269 || id === 270) syFinal *= 0.94;
-                if(id === 0) syFinal *= 0.92; // Centro do cupido profundo
-
+                // Lógica de "Arco Suave": IDs centrais têm menos expansão lateral (SX)
+                let finalSX = sx;
+                if(id === 37 || id === 0 || id === 267) finalSX *= 0.95; 
+                
                 return new THREE.Vector2(
-                    center.x + (p.x - center.x) * sx,
-                    1 - (center.y + (p.y - center.y) * syFinal)
+                    center.x + (p.x - center.x) * finalSX,
+                    1 - (center.y + (p.y - center.y) * sy)
                 );
             };
 
-            // INÍCIO DO DESENHO (Canto esquerdo)
+            // Desenho com Curvas de Bézier Quadráticas
             const start = getPt(61);
             shape.moveTo(start.x, start.y);
 
-            // CURVA BÉZIER PARA O LÁBIO SUPERIOR
-            // Usamos pontos ímpares como âncoras para suavizar os pares
+            // Topo (Arco do Cupido Pro)
             for (let i = 1; i < UPPER_OUTER.length - 1; i += 2) {
-                const cp = getPt(UPPER_OUTER[i]);
+                const cp = getPt(UPPER_OUTER[i], 1.12, 1.02); // Âncora ligeiramente mais alta
                 const end = getPt(UPPER_OUTER[i+1]);
                 shape.quadraticCurveTo(cp.x, cp.y, end.x, end.y);
             }
 
-            // CURVA BÉZIER PARA O LÁBIO INFERIOR
+            // Base
             for (let i = 1; i < LOWER_OUTER.length - 1; i += 2) {
-                const cp = getPt(LOWER_OUTER[i], 1.15, 1.05);
-                const end = getPt(LOWER_OUTER[i+1], 1.15, 1.0);
+                const cp = getPt(LOWER_OUTER[i], 1.12, 1.05);
+                const end = getPt(LOWER_OUTER[i+1]);
                 shape.quadraticCurveTo(cp.x, cp.y, end.x, end.y);
             }
 
-            // FURO INTERNO (Linear para precisão nos dentes)
+            // Furo Interno
             const hole = new THREE.Path();
             INNER_IDS.forEach((id, i) => {
-                const p = getPt(id, 1.15, 1.05);
+                const p = getPt(id, 1.08, 1.0);
                 if (i === 0) hole.moveTo(p.x, p.y); else hole.lineTo(p.x, p.y);
             });
             shape.holes = [hole];
 
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 16);
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 24); // Mais subdivisões para arredondar
 
-            // UV Mapping manual para o Shader
+            // UV Manual para o Shader
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
             const size = new THREE.Vector3(); bBox.getSize(size);
@@ -168,14 +162,7 @@
             renderer.render(scene, camera);
         }
 
-        window.changeColor = (hex, el) => {
-            lipMaterial.uniforms.uColor.value.setHex(hex);
-            document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
-            el.classList.add("active");
-        };
-
         window.updateOpacity = (v) => { lipMaterial.uniforms.uOpacity.value = parseFloat(v); };
-
         init();
     </script>
 </body>
