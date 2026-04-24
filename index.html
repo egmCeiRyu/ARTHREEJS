@@ -198,39 +198,51 @@
                 else shape.lineTo(x, 1 - y);
             });
 
-            OUTER.forEach((id, i) => {
-                const p = smoothed[id];
-                let sY = 1.02; // Escala padrão
-
-                // AJUSTE DO TOPO (Arco do Cupido)
-                if (id === 37 || id === 0 || id === 267) {
-                    sY = 1.0; // Valor que você definiu para o limite natural
+            function updateLips(landmarks) {
+                lipMesh.visible = true;
+                if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
+                else {
+                    for (let i = 0; i < landmarks.length; i++) {
+                        smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.85;
+                        smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.85;
+                    }
                 }
 
-                // AJUSTE DA BASE (Lábio Inferior - Ponto Central)
-                if (id === 17) {
-                    sY = 1.10;
-                    // 1.0  = Limite real do lábio (Natural)
-                    // 1.10 = Aumenta o volume (empurra para baixo na pele)
-                    // 0.95 = Diminui o lábio (puxa para dentro da boca)
-                }
+                const center = smoothed[13];
+                const shape = new THREE.Shape();
 
-                const x = center.x + (p.x - center.x) * 1.15;
-                const y = center.y + (p.y - center.y) * sY;
+                // --- CONTROLE DA BORDA EXTERNA (OUTER) ---
+                OUTER.forEach((id, i) => {
+                    const p = smoothed[id];
+                    let sY = 1.02; // Padrão
+                    let sX = 1.15; // Esticamento horizontal (que você gostou)
 
-                if (i === 0) shape.moveTo(x, 1 - y);
-                else shape.lineTo(x, 1 - y);
-            });
+                    if (id === 37 || id === 0 || id === 267) sY = 1.0; // Arco do Cupido (Natural)
+                    if (id === 17) sY = 1.0; // Base inferior (Natural)
 
-            const hole = new THREE.Path();
-            INNER.forEach((id, i) => {
-                const p = smoothed[id];
-                const x = center.x + (p.x - center.x) * 1.10;
-                const y = center.y + (p.y - center.y) * 1.0;
-                if (i === 0) hole.moveTo(x, 1 - y);
-                else hole.lineTo(x, 1 - y);
-            });
-            shape.holes = [hole];
+                    const x = center.x + (p.x - center.x) * sX;
+                    const y = center.y + (p.y - center.y) * sY;
+                    if (i === 0) shape.moveTo(x, 1 - y);
+                    else shape.lineTo(x, 1 - y);
+                });
+
+                // --- CONTROLE DO FURO INTERNO (INNER) ---
+                const hole = new THREE.Path();
+                INNER.forEach((id, i) => {
+                    const p = smoothed[id];
+
+                    // DICA: O scale do INNER deve ser sempre levemente MAIOR ou IGUAL ao do OUTER
+                    // para "esticar" o buraco e não deixar a cor entrar na boca.
+                    let sY_inner = 1.05;
+                    let sX_inner = 1.15;
+
+                    const x = center.x + (p.x - center.x) * sX_inner;
+                    const y = center.y + (p.y - center.y) * sY_inner;
+
+                    if (i === 0) hole.moveTo(x, 1 - y);
+                    else hole.lineTo(x, 1 - y);
+                });
+                shape.holes = [hole];
 
             if (lipMesh.geometry) lipMesh.geometry.dispose();
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 8);
