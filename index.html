@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick Banuba Pro</title>
+    <title>AR Lipstick Banuba Pro Clean</title>
 
     <style>
         :root {
@@ -139,27 +139,15 @@
             let smoothed = null;
             let lastVideoTime = -1;
 
-            /* CONTORNO EXTERNO COMPLETO */
+            /* TODOS PONTOS IMPORTANTES DA BOCA */
             const OUTER = [
-
                 61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
-
-                409, 270, 269, 267, 0, 37, 39, 40, 185,
-
-                61, 76, 62, 78, 95, 88, 178, 87, 14, 317,
-                402, 318, 324, 308, 415, 310, 311, 312,
-                13, 82, 81, 80, 191
-
+                409, 270, 269, 267, 0, 37, 39, 40, 185, 61
             ];
 
-
-            /* CONTORNO INTERNO / ABERTURA DA BOCA */
             const INNER = [
-
                 78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
-
-                415, 310, 311, 312, 13, 82, 81, 80, 191
-
+                415, 310, 311, 312, 13, 82, 81, 80, 191, 78
             ];
 
             init();
@@ -200,7 +188,7 @@
 
                 container3d.appendChild(renderer.domElement);
 
-                /* BANUBA PRO SHADER */
+                /* MATERIAL */
 
                 lipMaterial =
                     new THREE.ShaderMaterial({
@@ -219,11 +207,14 @@
 varying vec2 vUv;
 
 void main(){
+
 vUv = uv;
+
 gl_Position =
 projectionMatrix *
 modelViewMatrix *
 vec4(position,1.0);
+
 }
 `,
 
@@ -236,65 +227,69 @@ varying vec2 vUv;
 
 void main(){
 
+/* fade externo */
 float edgeX =
-smoothstep(0.0,0.05,vUv.x) *
-smoothstep(0.0,0.05,1.0-vUv.x);
+smoothstep(0.02,0.08,vUv.x) *
+smoothstep(0.02,0.08,1.0-vUv.x);
 
 float edgeY =
-smoothstep(0.0,0.10,vUv.y) *
-smoothstep(0.0,0.10,1.0-vUv.y);
+smoothstep(0.02,0.14,vUv.y) *
+smoothstep(0.02,0.14,1.0-vUv.y);
 
 float alpha = edgeX * edgeY;
 
-/* cavity */
-float cx =
-1.0 - abs(vUv.x-0.5)*2.0;
+/* remove parte interna da boca */
+float holeX =
+1.0 - abs(vUv.x - 0.5) * 2.0;
 
-float cy =
-1.0 - abs(vUv.y-0.5)*2.0;
+float holeY =
+1.0 - abs(vUv.y - 0.5) * 2.0;
 
-cx = pow(cx,1.2);
-cy = pow(cy,2.0);
+holeX = pow(holeX,1.2);
+holeY = pow(holeY,3.2);
 
-float cavity = cx * cy * 0.55;
+float mouthHole =
+holeX * holeY;
 
-/* lower lip light */
+alpha *= (1.0 - mouthHole * 0.95);
+
+/* volume inferior */
 float lower =
-smoothstep(0.42,0.92,vUv.y);
+smoothstep(0.48,0.95,vUv.y);
 
 float lowerVol =
-pow(lower,1.8) * 0.14;
+pow(lower,1.8) * 0.10;
 
-/* upper lip shadow */
+/* sombra superior */
 float upper =
-1.0 - smoothstep(0.0,0.42,vUv.y);
+1.0 - smoothstep(0.0,0.38,vUv.y);
 
 float upperShadow =
 upper * 0.12;
 
-/* gloss */
-float gx =
-1.0 - abs(vUv.x-0.5)*2.0;
+/* gloss suave */
+float glossX =
+1.0 - abs(vUv.x - 0.5) * 2.0;
 
-float gy =
-1.0 - abs(vUv.y-0.62)*3.0;
+float glossY =
+1.0 - abs(vUv.y - 0.70) * 3.5;
 
-gx = pow(gx,3.0);
-gy = max(gy,0.0);
-gy = pow(gy,2.0);
+glossX = pow(glossX,2.2);
+glossY = max(glossY,0.0);
+glossY = pow(glossY,2.0);
 
 float gloss =
-gx * gy * 0.58;
+glossX * glossY * 0.18;
 
+/* cor final */
 vec3 col = uColor;
 
-col *= (1.0 - cavity);
-col += vec3(lowerVol);
 col *= (1.0 - upperShadow);
+col += vec3(lowerVol);
 col += vec3(gloss);
 
 gl_FragColor =
-vec4(col,alpha*uOpacity);
+vec4(col, alpha * uOpacity);
 
 }
 `
@@ -370,6 +365,7 @@ vec4(col,alpha*uOpacity);
 
                     smoothed[i].y +=
                         (landmarks[i].y - smoothed[i].y) * 0.92;
+
                 }
             }
 
@@ -381,8 +377,8 @@ vec4(col,alpha*uOpacity);
 
                 const center = smoothed[13];
 
-                const scaleX = 1.13;
-                const scaleY = 1.10;
+                const scaleX = 1.12;
+                const scaleY = 1.08;
 
                 function fit(p) {
 
@@ -390,6 +386,7 @@ vec4(col,alpha*uOpacity);
                         x: center.x + (p.x - center.x) * scaleX,
                         y: center.y + (p.y - center.y) * scaleY
                     };
+
                 }
 
                 const shape = new THREE.Shape();
@@ -423,7 +420,6 @@ vec4(col,alpha*uOpacity);
                     new THREE.ShapeGeometry(shape, 4);
 
                 /* UV */
-
                 const pos =
                     lipMesh.geometry.attributes.position;
 
@@ -444,6 +440,7 @@ vec4(col,alpha*uOpacity);
 
                     uv[i * 2 + 1] =
                         (pos.getY(i) - box.min.y) / size.y;
+
                 }
 
                 lipMesh.geometry.setAttribute(
@@ -460,8 +457,7 @@ vec4(col,alpha*uOpacity);
 
                 lipMaterial.uniforms.uColor.value.setHex(hex);
 
-                document
-                    .querySelectorAll(".swatch")
+                document.querySelectorAll(".swatch")
                     .forEach(s => s.classList.remove("active"));
 
                 el.classList.add("active");
