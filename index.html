@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Makeup - No Teeth Painting</title>
+    <title>High-Precision Real-Time AR</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -21,8 +21,10 @@
             position: relative;
             width: 640px;
             height: 480px;
-            border-radius: 30px;
+            border-radius: 40px;
             overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,1);
+            border: 2px solid #222;
         }
 
         video {
@@ -30,9 +32,10 @@
             width: 100%;
             height: 100%;
             transform: scaleX(-1);
+            object-fit: cover;
         }
 
-        #three_container {
+        canvas {
             position: absolute;
             width: 100%;
             height: 100%;
@@ -45,33 +48,41 @@
             position: absolute;
             bottom: 20px;
             z-index: 20;
-            background: rgba(0,0,0,0.7);
-            padding: 15px;
-            border-radius: 20px;
+            background: rgba(15,15,15,0.9);
+            padding: 20px;
+            border-radius: 30px;
             width: 80%;
             left: 50%;
             transform: translateX(-50%);
-            text-align: center;
+            border: 1px solid #333;
+            backdrop-filter: blur(10px);
         }
 
         .swatches {
             display: flex;
             justify-content: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 15px;
+            margin-bottom: 15px;
         }
 
         .swatch {
-            width: 30px;
-            height: 30px;
+            width: 35px;
+            height: 35px;
             border-radius: 50%;
             cursor: pointer;
-            border: 2px solid #fff;
+            border: 2px solid transparent;
+            transition: 0.3s;
         }
+
+            .swatch.active {
+                border-color: white;
+                transform: scale(1.1);
+            }
 
         input[type=range] {
             width: 100%;
             accent-color: #ff4d6d;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -82,11 +93,13 @@
         <div id="three_container"></div>
         <div class="ui">
             <div class="swatches">
-                <div class="swatch" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d)"></div>
-                <div class="swatch" style="background: #8e2a4e;" onclick="changeColor(0x8e2a4e)"></div>
-                <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d)"></div>
+                <div class="swatch active" style="background: #be1e2d;" onclick="updateStyle(0xbe1e2d, 0.4, this)"></div>
+                <div class="swatch" style="background: #8e2a4e;" onclick="updateStyle(0x8e2a4e, 0.6, this)"></div>
+                <div class="swatch" style="background: #ff4d6d;" onclick="updateStyle(0xff4d6d, 0.5, this)"></div>
+                <div class="swatch" style="background: #000000;" onclick="updateStyle(0x000000, 0.3, this)"></div>
             </div>
-            <input type="range" min="0.1" max="0.9" step="0.01" value="0.4" oninput="updateOpacity(this.value)">
+            <input type="range" min="0" max="1" step="0.01" value="0.75" id="smoothSlider">
+            <div style="font-size: 10px; color: #666; text-align: center; margin-top: 5px;">STABILIZATION STRENGTH</div>
         </div>
     </div>
 
@@ -94,11 +107,10 @@
         const videoElement = document.getElementById('input_video');
         let scene, camera, renderer, lipMesh, material;
         let smoothedLandmarks = null;
+        let smoothingFactor = 0.75; // Controla a precisão vs latência
 
-        // 1. MAPEAMENTO DE PONTOS (EXTERNO E INTERNO)
-        // Contorno que percorre a borda de fora da boca inteira
+        // Índices de Alta Precisão (Refined Landmarks)
         const LIPS_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 408, 415, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
-        // Contorno que percorre a borda de dentro (onde a boca abre)
         const LIPS_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
 
         function init() {
@@ -113,64 +125,59 @@
             material = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.4,
+                opacity: 0.5,
                 side: THREE.DoubleSide
             });
 
-            // Criamos uma geometria vazia inicial
             const geometry = new THREE.BufferGeometry();
             lipMesh = new THREE.Mesh(geometry, material);
             scene.add(lipMesh);
+
+            document.getElementById('smoothSlider').oninput = (e) => smoothingFactor = parseFloat(e.target.value);
         }
 
-        window.changeColor = (hex) => { material.color.setHex(hex); };
-        window.updateOpacity = (val) => { material.opacity = val; };
+        window.updateStyle = (hex, op, el) => {
+            material.color.setHex(hex);
+            material.opacity = op;
+            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+        };
 
         function onResults(results) {
             if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
 
             const landmarks = results.multiFaceLandmarks[0];
 
-            // Suavização
+            // --- LÓGICA DE PRECISÃO: FILTRO LERP ---
             if (!smoothedLandmarks) {
                 smoothedLandmarks = landmarks;
             } else {
                 smoothedLandmarks = landmarks.map((p, i) => ({
-                    x: smoothedLandmarks[i].x * 0.7 + p.x * 0.3,
-                    y: smoothedLandmarks[i].y * 0.7 + p.y * 0.3
+                    x: smoothedLandmarks[i].x * smoothingFactor + p.x * (1 - smoothingFactor),
+                    y: smoothedLandmarks[i].y * smoothingFactor + p.y * (1 - smoothingFactor)
                 }));
             }
 
-            // --- NOVA LÓGICA DE GEOMETRIA COM FURO ---
-
-            // 1. Criar a Forma Externa (O formato do batom)
+            // Criar forma geométrica precisa
             const mouthShape = new THREE.Shape();
             const startOuter = smoothedLandmarks[LIPS_OUTER[0]];
             mouthShape.moveTo(startOuter.x, 1 - startOuter.y);
-
-            for (let i = 1; i < LIPS_OUTER.length; i++) {
-                const p = smoothedLandmarks[LIPS_OUTER[i]];
+            LIPS_OUTER.forEach(idx => {
+                const p = smoothedLandmarks[idx];
                 mouthShape.lineTo(p.x, 1 - p.y);
-            }
+            });
 
-            // 2. Criar a Forma Interna (O buraco da boca)
             const holePath = new THREE.Path();
             const startInner = smoothedLandmarks[LIPS_INNER[0]];
             holePath.moveTo(startInner.x, 1 - startInner.y);
-
-            for (let i = 1; i < LIPS_INNER.length; i++) {
-                const p = smoothedLandmarks[LIPS_INNER[i]];
+            LIPS_INNER.forEach(idx => {
+                const p = smoothedLandmarks[idx];
                 holePath.lineTo(p.x, 1 - p.y);
-            }
+            });
 
-            // 3. Adicionar o buraco à forma principal
             mouthShape.holes.push(holePath);
 
-            // 4. Gerar a geometria a partir da forma (Isso triangula automaticamente com o furo)
             const geometry = new THREE.ShapeGeometry(mouthShape);
-
-            // 5. Atualizar a malha existente com a nova geometria
-            // No Three.js, é mais eficiente dispose() da geometria antiga e set a nova
             lipMesh.geometry.dispose();
             lipMesh.geometry = geometry;
 
@@ -178,7 +185,7 @@
         }
 
         const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-        faceMesh.setOptions({ refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        faceMesh.setOptions({ refineLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
         faceMesh.onResults(onResults);
 
         const cameraHelper = new Camera(videoElement, {
