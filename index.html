@@ -177,8 +177,8 @@
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
-                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.85;
-                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.85;
+                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.95;
+                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.95;
                 }
             }
 
@@ -190,16 +190,16 @@
                 const p = smoothed[id];
 
                 // LARGURA DA BOCA: Aumente o sX (ex: 1.2) para esticar mais para os lados.
-                let sX = 1.15;
+                let sX = 1.08;
 
                 // ALTURA GERAL: Aumente o sY (ex: 1.1) para deixar os lábios mais grossos.
                 let sY = 1.02;
 
                 // ARCO DO CUPIDO (TOPO): Diminua (ex: 0.98) para descer a cor e não subir na pele.
-                if (id === 37 || id === 0 || id === 267) sY = 1.0;
+                if (id === 37 || id === 0 || id === 267) sY = 0.98;
 
                 // LÁBIO INFERIOR (BASE): Diminua (ex: 0.98) para levantar a cor e não descer no queixo.
-                if (id === 17) sY = 1.0;
+                if (id === 17) sY = 1.2;
 
                 const x = center.x + (p.x - center.x) * sX;
                 const y = center.y + (p.y - center.y) * sY;
