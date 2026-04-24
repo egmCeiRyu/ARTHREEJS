@@ -2,9 +2,11 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Lipstick HD - No Aura Fix</title>
+    <title>AR Lipstick HD - Ultra Performance</title>
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <style>
         :root {
             --accent: #ff4d6d;
@@ -19,7 +21,7 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            font-family: sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             color: #fff;
         }
 
@@ -27,9 +29,11 @@
             position: relative;
             width: 640px;
             height: 480px;
+            background: #000;
             border-radius: 30px;
             overflow: hidden;
             border: 1px solid #333;
+            box-shadow: 0 20px 60px rgba(0,0,0,.8);
         }
 
         video, #three_container {
@@ -53,6 +57,15 @@
             backdrop-filter: blur(10px);
         }
 
+        .ui-title {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 15px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
         .swatches {
             display: flex;
             gap: 15px;
@@ -65,11 +78,13 @@
             border-radius: 50%;
             cursor: pointer;
             border: 3px solid transparent;
+            transition: .2s;
         }
 
             .swatch.active {
                 border-color: #fff;
                 transform: scale(1.1);
+                box-shadow: 0 0 15px rgba(255,255,255,.2);
             }
 
         .slider-container {
@@ -79,6 +94,17 @@
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
+            height: 6px;
+            cursor: pointer;
+        }
+
+        .labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #666;
+            margin-top: 8px;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -90,6 +116,7 @@
     </div>
 
     <div class="ui-panel">
+        <div class="ui-title">カラーを選択してください</div>
         <div class="swatches">
             <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
             <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
@@ -98,31 +125,25 @@
             <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
         </div>
         <div class="slider-container">
-            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
-            <div class="labels" style="display:flex; justify-content: space-between; font-size: 10px; color: #888;">
-                <span>NATURAL</span><span id="int-val">60%</span><span>VIVID</span>
+            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.45" oninput="updateOpacity(this.value)">
+            <div class="labels">
+                <span>ナチュラル</span>
+                <span id="int-val">45%</span>
+                <span>ビビッド</span>
             </div>
         </div>
     </div>
 
     <script type="module">
-        import {
-            FaceLandmarker,
-            FilesetResolver
-        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
         const video = document.getElementById("webcam");
-        let faceLandmarker;
-        let scene, camera, renderer, lipMesh, lipMaterial;
+        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
         let smoothed = null;
         let lastVideoTime = -1;
 
-        // Configurações de índices
         const OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
         const INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
-
-        // COR DE INÍCIO DA UI (vermelho)
-        let currentLipColor = new THREE.Color(0xbe1e2d);
 
         async function init() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
@@ -131,8 +152,7 @@
                     modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
                     delegate: "GPU"
                 },
-                runningMode: "VIDEO",
-                numFaces: 1
+                runningMode: "VIDEO", numFaces: 1
             });
 
             scene = new THREE.Scene();
@@ -144,48 +164,34 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-            // --- NOVO MATERIAL SHADER (ULTRA REALISTA) ---
-            // Usamos ShaderMaterial para controlar a suavização da borda matematicamente.
-            lipMaterial = new THREE.ShaderMaterial({
-                uniforms: {
-                    uColor: { value: currentLipColor },
-                    uOpacity: { value: 0.56 }, // Valor inicial da UI (56%)
-                    uEdgeSoftness: { value: 0.15 } // Controla o feathering da borda
-                },
+            // GERAÇÃO DA TEXTURA DE BRILHO (GLOSS) SEM BORDAS BRANCAS
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(64, 64, 5, 64, 64, 60);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 128, 128);
+            const glossMap = new THREE.CanvasTexture(canvas);
+
+            lipMaterial = new THREE.MeshPhongMaterial({
+                color: 0xbe1e2d,
+                specularMap: glossMap,
+                specular: 0xffffff,
+                shininess: 120,
                 transparent: true,
+                opacity: 0.45,
                 side: THREE.DoubleSide,
                 depthWrite: false,
-                blending: THREE.CustomBlending,
-                blendEquation: THREE.AddEquation,
-                blendSrc: THREE.SrcAlphaFactor,
-                blendDst: THREE.OneMinusSrcAlphaFactor,
-
-                vertexShader: `
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `,
-                fragmentShader: `
-            uniform vec3 uColor;
-            uniform float uOpacity;
-            uniform float uEdgeSoftness;
-            varying vec2 vUv;
-            
-            void main() {
-                // Cria um gradiente radial procedural para o Alpha
-                // Centralizado nos lábios (0.5, 0.5)
-                float dist = distance(vUv, vec2(0.5, 0.5));
-                
-                // Suaviza a borda externa usando uEdgeSoftness
-                float alpha = smoothstep(0.5, 0.5 - uEdgeSoftness, dist);
-                
-                // Aplica a cor e a opacidade total da UI
-                gl_FragColor = vec4(uColor, alpha * uOpacity);
-            }
-        `
+                blending: THREE.NormalBlending
             });
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const light = new THREE.DirectionalLight(0xffffff, 0.5);
+            light.position.set(0, 0, 1);
+            scene.add(light);
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
@@ -221,7 +227,7 @@
                 smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
                 return;
             }
-            const factor = 0.85; // Estabilização rápida
+            const factor = 0.85;
             for (let i = 0; i < landmarks.length; i++) {
                 smoothed[i].x += (landmarks[i].x - smoothed[i].x) * factor;
                 smoothed[i].y += (landmarks[i].y - smoothed[i].y) * factor;
@@ -231,16 +237,13 @@
         function updateLips(landmarks) {
             lipMesh.visible = true;
             smooth(landmarks);
-
             const center = smoothed[13];
-            const scaleX = 1.01; // Ajuste micro para não criar aura
-            const scaleY = 1.01;
 
             const shape = new THREE.Shape();
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
-                const x = center.x + (p.x - center.x) * scaleX;
-                const y = center.y + (p.y - center.y) * scaleY;
+                const x = center.x + (p.x - center.x) * 1.03;
+                const y = center.y + (p.y - center.y) * 1.05;
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
             });
@@ -248,8 +251,8 @@
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
-                const x = center.x + (p.x - center.x) * scaleX;
-                const y = center.y + (p.y - center.y) * scaleY;
+                const x = center.x + (p.x - center.x) * 1.03;
+                const y = center.y + (p.y - center.y) * 1.05;
                 if (i === 0) hole.moveTo(x, 1 - y);
                 else hole.lineTo(x, 1 - y);
             });
@@ -258,7 +261,7 @@
             if (lipMesh.geometry) lipMesh.geometry.dispose();
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 4);
 
-            // --- MAPEAMENTO UV PARA O SHADER FUNCIONAR ---
+            // MAPEAMENTO UV PARA O GLOSS FICAR CENTRALIZADO
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
             const size = new THREE.Vector3();
@@ -273,19 +276,14 @@
             renderer.render(scene, camera);
         }
 
-        // --- HANDLERS DE UI ATUALIZADOS PARA O SHADER ---
         window.changeColor = (hex, el) => {
-            // Atualiza a cor no uniforme do shader
-            lipMaterial.uniforms.uColor.value.setHex(hex);
-
+            lipMaterial.color.setHex(hex);
             document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
             el.classList.add("active");
         };
 
         window.updateOpacity = (v) => {
-            // Atualiza a opacidade no uniforme do shader
-            lipMaterial.uniforms.uOpacity.value = parseFloat(v);
-
+            lipMaterial.opacity = v;
             document.getElementById("int-val").innerText = Math.round(v * 100) + "%";
         };
 
