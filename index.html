@@ -109,63 +109,68 @@
             drawLips();
         }
 
-        function drawLips() {
-            const center = smoothed[13]; 
-            const shape = new THREE.Shape();
+function drawLips() {
+    const center = smoothed[13];
+    const shape = new THREE.Shape();
 
-            // PONTOS EXTERNOS (IGUAL AO BANUBA)
-            const OUTER_TOP = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291];
-            const OUTER_BOTTOM = [291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
+    // IDs para um desenho fluido
+    const topPoints = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291];
+    const bottomPoints = [291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
 
-            const getPt = (id, sx = 1.03, sy = 1.0) => {
-                const p = smoothed[id];
-                return new THREE.Vector2(
-                    center.x + (p.x - center.x) * sx,
-                    1 - (center.y + (p.y - center.y) * sy)
-                );
-            };
+    const getPt = (id, sx = 1.02, sy = 1.0) => {
+        const p = smoothed[id];
+        // O Banuba não expande o batom para fora, ele mantém quase 1:1
+        return new THREE.Vector2(
+            center.x + (p.x - center.x) * sx,
+            1 - (center.y + (p.y - center.y) * sy)
+        );
+    };
 
-            // Início
-            const start = getPt(61, 1.0);
-            shape.moveTo(start.x, start.y);
+    // Início no canto com precisão 1:1
+    const start = getPt(61, 1.0, 1.0);
+    shape.moveTo(start.x, start.y);
 
-            // Topo (Arco suave)
-            OUTER_TOP.forEach(id => {
-                let p = getPt(id, 1.03, 1.02);
-                if (id === 0) p = getPt(id, 1.03, 1.08); // Leve descida no centro
-                shape.lineTo(p.x, p.y);
-            });
+    // Desenho do Topo com suavização de curva
+    topPoints.forEach((id, i) => {
+        if (i === 0) return;
+        const p = getPt(id, 1.02, id === 0 ? 1.05 : 1.01); 
+        // Usamos spline manual: o ponto anterior serve de controle suave
+        const prev = getPt(topPoints[i-1], 1.02, 1.01);
+        shape.quadraticCurveTo(prev.x, prev.y, p.x, p.y);
+    });
 
-            // Base
-            OUTER_BOTTOM.forEach(id => {
-                const p = getPt(id, 1.03, 1.05);
-                shape.lineTo(p.x, p.y);
-            });
+    // Desenho da Base
+    bottomPoints.forEach((id, i) => {
+        if (i === 0) return;
+        const p = getPt(id, 1.02, 1.03);
+        const prev = getPt(bottomPoints[i-1], 1.02, 1.03);
+        shape.quadraticCurveTo(prev.x, prev.y, p.x, p.y);
+    });
 
-            // Furo (Dentes limpos)
-            const hole = new THREE.Path();
-            const INNER_IDS = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
-            INNER_IDS.forEach((id, i) => {
-                const p = getPt(id, 1.0, 1.0);
-                if (i === 0) hole.moveTo(p.x, p.y); else hole.lineTo(p.x, p.y);
-            });
-            shape.holes = [hole];
+    // Furo Interno (Hole) com recuo para não pintar dentes
+    const hole = new THREE.Path();
+    const INNER_IDS = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
+    INNER_IDS.forEach((id, i) => {
+        const p = getPt(id, 0.98, 0.98); // Encolhe levemente para dentro
+        if (i === 0) hole.moveTo(p.x, p.y); else hole.lineTo(p.x, p.y);
+    });
+    shape.holes = [hole];
 
-            if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 32);
+    if (lipMesh.geometry) lipMesh.geometry.dispose();
+    lipMesh.geometry = new THREE.ShapeGeometry(shape, 32); // Mais faces para suavidade Banuba
 
-            // UV Manual
-            const pos = lipMesh.geometry.attributes.position;
-            const bbox = new THREE.Box3().setFromBufferAttribute(pos);
-            const size = new THREE.Vector3(); bbox.getSize(size);
-            const uv = new Float32Array(pos.count * 2);
-            for (let i = 0; i < pos.count; i++) {
-                uv[i * 2] = (pos.getX(i) - bbox.min.x) / size.x;
-                uv[i * 2 + 1] = (pos.getY(i) - bbox.min.y) / size.y;
-            }
-            lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-            renderer.render(scene, camera);
-        }
+    // UV e Render (mantém o resto igual)
+    const pos = lipMesh.geometry.attributes.position;
+    const bbox = new THREE.Box3().setFromBufferAttribute(pos);
+    const size = new THREE.Vector3(); bbox.getSize(size);
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+        uv[i * 2] = (pos.getX(i) - bbox.min.x) / size.x;
+        uv[i * 2 + 1] = (pos.getY(i) - bbox.min.y) / size.y;
+    }
+    lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    renderer.render(scene, camera);
+}
 
         window.changeColor = (hex, el) => {
             lipMaterial.uniforms.uColor.value.setHex(hex);
