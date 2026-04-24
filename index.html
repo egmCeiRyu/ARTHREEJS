@@ -137,265 +137,160 @@
     </div>
 
     <script type="module">
-
         import {
             FaceLandmarker,
             FilesetResolver
         } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
         const video = document.getElementById("webcam");
-
-        let faceLandmarker;
-        let scene, camera, renderer;
-        let lipMesh, lipMaterial;
-
+        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
         let smoothed = null;
         let lastVideoTime = -1;
 
-        const OUTER = [
-            61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291,
-            375, 321, 405, 314, 17, 84, 181, 91, 146, 61
-        ];
-
-        const INNER = [
-            78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308,
-            324, 318, 402, 317, 14, 87, 178, 88, 95, 78
-        ];
+        const OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146, 61];
+        const INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
 
         async function init() {
-
-            const filesetResolver =
-                await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-                );
-
-            faceLandmarker =
-                await FaceLandmarker.createFromOptions(filesetResolver, {
-                    baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                        delegate: "GPU"
-                    },
-                    runningMode: "VIDEO",
-                    numFaces: 1
-                });
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                numFaces: 1
+            });
 
             scene = new THREE.Scene();
-
-            camera =
-                new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
-
+            camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
             camera.position.z = 1;
 
-            renderer =
-                new THREE.WebGLRenderer({
-                    alpha: true,
-                    antialias: true
-                });
-
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(640, 480);
             renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById("three_container").appendChild(renderer.domElement);
 
-            document.getElementById("three_container")
-                .appendChild(renderer.domElement);
+            // --- CARREGAMENTO DA TEXTURA ---
+            const loader = new THREE.TextureLoader();
+            const lipTexture = loader.load('lips.png'); // <--- INSIRA O LINK AQUI
 
-            lipMaterial =
-                new THREE.MeshBasicMaterial({
-                    color: 0xbe1e2d,
-                    transparent: true,
-                    opacity: 0.45,
-                    side: THREE.DoubleSide,
-                    depthWrite: false,
-                    blending: THREE.NormalBlending
-                });
+            // --- MATERIAL COM TEXTURA E BRILHO (PHONG) ---
+            lipMaterial = new THREE.MeshPhongMaterial({
+                color: 0xbe1e2d,
+                map: lipTexture,
+                transparent: true,
+                opacity: 0.45,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                specular: 0x444444, // Cor do reflexo
+                shininess: 30       // Intensidade do gloss
+            });
 
-            lipMesh =
-                new THREE.Mesh(
-                    new THREE.BufferGeometry(),
-                    lipMaterial
-                );
+            // --- LUZES PARA REAGIR COM A TEXTURA ---
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffffff, 0.5);
+            pointLight.position.set(0.5, 0.5, 1);
+            scene.add(pointLight);
 
+            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
 
             startCamera();
         }
 
         function startCamera() {
-
             navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: 640,
-                    height: 480,
-                    frameRate: { ideal: 60, max: 60 }
-                }
+                video: { width: 640, height: 480, frameRate: { ideal: 60 } }
             }).then(stream => {
-
                 video.srcObject = stream;
-                requestAnimationFrame(loop);
-
+                video.requestVideoFrameCallback(loop);
             });
         }
 
         function loop() {
-
-            if (video.readyState >= 2 &&
-                video.currentTime !== lastVideoTime) {
-
+            if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
-
-                const result =
-                    faceLandmarker.detectForVideo(
-                        video,
-                        Date.now()
-                    );
-
-                if (result.faceLandmarks &&
-                    result.faceLandmarks[0]) {
-
+                const result = faceLandmarker.detectForVideo(video, performance.now());
+                if (result.faceLandmarks && result.faceLandmarks[0]) {
                     updateLips(result.faceLandmarks[0]);
-
                 } else {
-
                     lipMesh.visible = false;
                     renderer.render(scene, camera);
-
                 }
             }
-
-            requestAnimationFrame(loop);
+            video.requestVideoFrameCallback(loop);
         }
 
         function smooth(landmarks) {
-
             if (!smoothed) {
-
-                smoothed = landmarks.map(p => ({
-                    x: p.x,
-                    y: p.y,
-                    z: p.z
-                }));
-
+                smoothed = landmarks.map(p => ({ x: p.x, y: p.y, z: p.z }));
                 return;
             }
-
+            const factor = 0.8;
             for (let i = 0; i < landmarks.length; i++) {
-
-                const dx =
-                    Math.abs(landmarks[i].x - smoothed[i].x);
-
-                const dy =
-                    Math.abs(landmarks[i].y - smoothed[i].y);
-
-                const speed = dx + dy;
-
-                const factor =
-                    speed > 0.01 ? 0.94 : 0.62;
-
-                smoothed[i].x +=
-                    (landmarks[i].x - smoothed[i].x) * factor;
-
-                smoothed[i].y +=
-                    (landmarks[i].y - smoothed[i].y) * factor;
+                smoothed[i].x += (landmarks[i].x - smoothed[i].x) * factor;
+                smoothed[i].y += (landmarks[i].y - smoothed[i].y) * factor;
             }
         }
 
-        let prevX = 0;
-        let prevY = 0;
-
         function updateLips(landmarks) {
-
             lipMesh.visible = true;
-
             smooth(landmarks);
 
             const center = smoothed[13];
-
-            const move =
-                Math.abs(center.x - prevX) +
-                Math.abs(center.y - prevY);
-
-            prevX = center.x;
-            prevY = center.y;
-
-            if (move < 0.00015) {
-
-                renderer.render(scene, camera);
-                return;
-            }
-
-            const scaleX = 1.06;
-            const scaleY = 1.12;
-
-            const cx = center.x;
-            const cy = center.y;
-
-            function fitPoint(p) {
-
-                return {
-                    x: cx + (p.x - cx) * scaleX,
-                    y: cy + (p.y - cy) * scaleY
-                };
-
-            }
+            const scaleX = 1.04;
+            const scaleY = 1.08;
 
             const shape = new THREE.Shape();
-
             OUTER.forEach((id, i) => {
-
-                const p = fitPoint(smoothed[id]);
-
-                if (i === 0)
-                    shape.moveTo(p.x, 1 - p.y);
-                else
-                    shape.lineTo(p.x, 1 - p.y);
-
+                const p = smoothed[id];
+                const x = center.x + (p.x - center.x) * scaleX;
+                const y = center.y + (p.y - center.y) * scaleY;
+                if (i === 0) shape.moveTo(x, 1 - y);
+                else shape.lineTo(x, 1 - y);
             });
 
             const hole = new THREE.Path();
-
             INNER.forEach((id, i) => {
-
-                const p = fitPoint(smoothed[id]);
-
-                if (i === 0)
-                    hole.moveTo(p.x, 1 - p.y);
-                else
-                    hole.lineTo(p.x, 1 - p.y);
-
+                const p = smoothed[id];
+                const x = center.x + (p.x - center.x) * scaleX;
+                const y = center.y + (p.y - center.y) * scaleY;
+                if (i === 0) hole.moveTo(x, 1 - y);
+                else hole.lineTo(x, 1 - y);
             });
-
             shape.holes = [hole];
 
-            if (lipMesh.geometry)
-                lipMesh.geometry.dispose();
+            if (lipMesh.geometry) lipMesh.geometry.dispose();
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 4);
 
-            lipMesh.geometry =
-                new THREE.ShapeGeometry(shape, 4);
+            // --- MAPEAMENTO UV PARA A TEXTURA ---
+            const pos = lipMesh.geometry.attributes.position;
+            const bBox = new THREE.Box3().setFromBufferAttribute(pos);
+            const size = new THREE.Vector3();
+            bBox.getSize(size);
+            const uv = new Float32Array((pos.count) * 2);
+            for (let i = 0; i < pos.count; i++) {
+                uv[i * 2] = (pos.getX(i) - bBox.min.x) / size.x;
+                uv[i * 2 + 1] = (pos.getY(i) - bBox.min.y) / size.y;
+            }
+            lipMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 
             renderer.render(scene, camera);
         }
 
-        /* UI */
-
         window.changeColor = (hex, el) => {
-
             lipMaterial.color.setHex(hex);
-
-            document.querySelectorAll(".swatch")
-                .forEach(s => s.classList.remove("active"));
-
+            document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
             el.classList.add("active");
         };
 
         window.updateOpacity = (v) => {
-
             lipMaterial.opacity = v;
-
-            document.getElementById("int-val")
-                .innerText = Math.round(v * 100) + "%";
+            document.getElementById("int-val").innerText = Math.round(v * 100) + "%";
         };
 
         init();
-
     </script>
 </body>
 </html>
