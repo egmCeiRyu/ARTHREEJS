@@ -1,167 +1,193 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Anatomical AR Lips - Subtle Fit</title>
-    
+    <title>High-Speed AR Lips</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
     <style>
-        :root { --accent: #ff4d6d; }
-        body { margin: 0; background: #050505; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Segoe UI', system-ui, sans-serif; color: white; }
-        
-        #container { position: relative; width: 640px; height: 480px; background: #000; border-radius: 30px; overflow: hidden; border: 1px solid #333; box-shadow: 0 20px 60px rgba(0,0,0,0.8); }
-        video, #three_container { position: absolute; width: 100%; height: 100%; transform: scaleX(-1); object-fit: cover; }
-        
-        /* Painel de Controle UI Ajustado */
-        .ui-panel { margin-top: 25px; background: rgba(20, 20, 20, 0.95); padding: 20px; border-radius: 25px; width: 550px; display: flex; flex-direction: column; align-items: center; border: 1px solid #444; backdrop-filter: blur(10px); }
-        .ui-title { font-size: 12px; color: #888; margin-bottom: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;}
-        
-        .swatches { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
-        .swatch { width: 38px; height: 38px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-        .swatch.active { border-color: white; transform: scale(1.1); box-shadow: 0 0 15px rgba(255,255,255,0.2); }
-        
-        .slider-container { width: 100%; display: flex; flex-direction: column; align-items: center; }
-        input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; height: 6px; border-radius: 5px; }
-        .labels { display: flex; justify-content: space-between; width: 100%; font-size: 10px; color: #666; margin-top: 8px; font-weight: bold; }
+        :root {
+            --accent: #ff4d6d;
+        }
+
+        body {
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
+
+        #container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        video, #three_container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        .ui-panel {
+            margin-top: 20px;
+            background: rgba(30, 30, 30, 0.9);
+            padding: 15px;
+            border-radius: 20px;
+            width: 400px;
+            text-align: center;
+            color: white;
+        }
+
+        .swatches {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .swatch {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+            .swatch.active {
+                border-color: white;
+            }
     </style>
 </head>
 <body>
 
-<div id="container">
-    <video id="webcam" autoplay playsinline></video>
-    <div id="three_container"></div>
-</div>
-
-<div class="ui-panel">
-    <div class="ui-title">カラーを選択してください</div>
-    <div class="swatches">
-        <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
-        <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
-        <div class="swatch" style="background: #f28b82;" onclick="changeColor(0xf28b82, this)"></div>
-        <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
-        <div class="swatch" style="background: #000000;" onclick="changeColor(0x000000, this)"></div>
+    <div id="container">
+        <video id="webcam" autoplay playsinline></video>
+        <div id="three_container"></div>
     </div>
-    <div class="slider-container">
-        <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.4" oninput="updateOpacity(this.value)">
-        <div class="labels"><span>ナチュラル</span><span id="int-val">40%</span><span>ビビッド</span></div>
+
+    <div class="ui-panel">
+        <div class="swatches">
+            <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
+            <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
+            <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
+        </div>
+        <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="0.5" oninput="updateOpacity(this.value)" style="width:80%">
     </div>
-</div>
 
-<script type="module">
-    import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+    <script type="module">
+        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
-    const video = document.getElementById("webcam");
-    let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
-    let lastVideoTime = -1;
-    let smoothedLandmarks = null;
+        const video = document.getElementById("webcam");
+        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
+        let lastVideoTime = -1;
 
-    // ÍNDICES ANATÔMICOS DE PRECISÃO (40 PONTOS)
-    const LIPS_OUTER_DETAILED = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
-    const LIPS_INNER_DETAILED = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+        // Reduzimos o Smoothing para 0.2 (antes era 0.75).
+        // Quanto menor esse número, mais rápido o filtro segue o rosto.
+        const SMOOTHING = 0.2;
+        let smoothedLandmarks = null;
 
-    async function init() {
-        const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
-        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-            baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
-            runningMode: "VIDEO", numFaces: 1
-        });
+        const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
+        const LIPS_INNER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
 
-        scene = new THREE.Scene();
-        camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
-        camera.position.z = 1;
+        async function init() {
+            const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+            faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                    delegate: "GPU" // Força o uso da placa de vídeo para velocidade máxima
+                },
+                runningMode: "VIDEO", numFaces: 1
+            });
 
-        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-        renderer.setSize(640, 480);
-        renderer.setPixelRatio(1);
-        document.getElementById('three_container').appendChild(renderer.domElement);
+            scene = new THREE.Scene();
+            camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
+            camera.position.z = 1;
 
-        // --- MELHORIA DE NATURALIDADE: MODO DE MESCLAGEM ---
-        // Usamos CustomBlending para simular a transparência real de um batom cremoso,
-        // preservando a textura e as ranhuras dos lábios reais.
-        lipMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0xbe1e2d, 
-            transparent: true, 
-            opacity: 0.4, // Padrão mais baixo e natural
-            side: THREE.DoubleSide,
-            blending: THREE.CustomBlending,
-            blendEquation: THREE.AddEquation,
-            blendSrc: THREE.SrcAlphaFactor, 
-            blendDst: THREE.OneMinusSrcAlphaFactor
-        });
-        
-        lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
-        scene.add(lipMesh);
-        startCamera();
-    }
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false }); // Antialias off melhora FPS em mobile
+            renderer.setSize(640, 480);
+            document.getElementById('three_container').appendChild(renderer.domElement);
 
-    function startCamera() {
-        navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then((stream) => {
-            video.srcObject = stream;
-            video.addEventListener("loadeddata", predictWebcam);
-        });
-    }
+            lipMaterial = new THREE.MeshBasicMaterial({
+                color: 0xbe1e2d, transparent: true, opacity: 0.5, side: THREE.DoubleSide
+            });
 
-    async function predictWebcam() {
-        if (lastVideoTime !== video.currentTime) {
-            lastVideoTime = video.currentTime;
-            const results = faceLandmarker.detectForVideo(video, performance.now());
-            if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                updateVisuals(results.faceLandmarks[0]);
-            }
+            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
+            scene.add(lipMesh);
+            startCamera();
         }
-        window.requestAnimationFrame(predictWebcam);
-    }
 
-    window.changeColor = (hex, el) => {
-        lipMaterial.color.setHex(hex);
-        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-        el.classList.add('active');
-    };
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({
+                video: { width: 640, height: 480, frameRate: { ideal: 30, max: 60 } }
+            }).then((stream) => {
+                video.srcObject = stream;
+                video.requestVideoFrameCallback(predictWebcam); // Método mais eficiente que addEventListener
+            });
+        }
 
-    window.updateOpacity = (val) => {
-        lipMaterial.opacity = val;
-        document.getElementById('int-val').innerText = Math.round(val * 100) + "%";
-    };
+        function predictWebcam() {
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const results = faceLandmarker.detectForVideo(video, performance.now());
+                if (results.faceLandmarks && results.faceLandmarks[0]) {
+                    updateVisuals(results.faceLandmarks[0]);
+                }
+            }
+            video.requestVideoFrameCallback(predictWebcam);
+        }
 
-    function updateVisuals(landmarks) {
-        // Suavização Temporal (LERP 0.75) para estabilidade
-        if (!smoothedLandmarks) smoothedLandmarks = landmarks;
-        else smoothedLandmarks = landmarks.map((p, i) => ({
-                x: (smoothedLandmarks[i].x * 0.75) + (p.x * 0.25),
-                y: (smoothedLandmarks[i].y * 0.75) + (p.y * 0.25)
-        }));
+        function updateVisuals(landmarks) {
+            // Lógica de Smoothing Acelerada
+            if (!smoothedLandmarks) {
+                smoothedLandmarks = landmarks;
+            } else {
+                for (let i = 0; i < landmarks.length; i++) {
+                    smoothedLandmarks[i].x += (landmarks[i].x - smoothedLandmarks[i].x) * (1 - SMOOTHING);
+                    smoothedLandmarks[i].y += (landmarks[i].y - smoothedLandmarks[i].y) * (1 - SMOOTHING);
+                }
+            }
 
-        const mouthShape = new THREE.Shape();
-        const startOuter = smoothedLandmarks[LIPS_OUTER_DETAILED[0]];
-        mouthShape.moveTo(startOuter.x, 1 - startOuter.y);
+            const mouthShape = new THREE.Shape();
 
-        // --- AJUSTE ANATÔMICO SUTIL ---
-        LIPS_OUTER_DETAILED.forEach(idx => {
-            const p = smoothedLandmarks[idx];
-            mouthShape.lineTo(p.x, 1 - p.y);
-        });
+            // Desenho otimizado
+            LIPS_OUTER.forEach((idx, i) => {
+                const p = smoothedLandmarks[idx];
+                if (i === 0) mouthShape.moveTo(p.x, 1 - p.y);
+                else mouthShape.lineTo(p.x, 1 - p.y);
+            });
 
-        // Furo interno para não pintar os dentes
-        const holePath = new THREE.Path();
-        const startInner = smoothedLandmarks[LIPS_INNER_DETAILED[0]];
-        holePath.moveTo(startInner.x, 1 - startInner.y);
-        LIPS_INNER_DETAILED.forEach(idx => {
-            const p = smoothedLandmarks[idx];
-            holePath.lineTo(p.x, 1 - p.y);
-        });
-        
-        mouthShape.holes.push(holePath);
+            const holePath = new THREE.Path();
+            LIPS_INNER.forEach((idx, i) => {
+                const p = smoothedLandmarks[idx];
+                if (i === 0) holePath.moveTo(p.x, 1 - p.y);
+                else holePath.lineTo(p.x, 1 - p.y);
+            });
+            mouthShape.holes.push(holePath);
 
-        lipMesh.geometry.dispose();
-        // ShapeGeometry(shape, 12) garante curvas suaves e anatômicas
-        lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 12);
-        
-        renderer.render(scene, camera);
-    }
+            if (lipMesh.geometry) lipMesh.geometry.dispose();
+            lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 4); // Reduzido de 12 para 4 para processar mais rápido
 
-    init();
-</script>
+            renderer.render(scene, camera);
+        }
+
+        window.changeColor = (hex, el) => {
+            lipMaterial.color.setHex(hex);
+            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+        };
+
+        window.updateOpacity = (val) => { lipMaterial.opacity = val; };
+
+        init();
+    </script>
 </body>
 </html>
