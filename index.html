@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick Pro - Final Fixed</title>
+    <title>AR Lipstick Pro - Custom Regulation</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -120,12 +120,8 @@
         async function init() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: {
-                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                numFaces: 1
+                baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
+                runningMode: "VIDEO", numFaces: 1
             });
 
             scene = new THREE.Scene();
@@ -161,7 +157,7 @@
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then(stream => {
                 video.srcObject = stream;
                 video.requestVideoFrameCallback(loop);
-            }).catch(err => console.error("Camera error:", err));
+            });
         }
 
         function loop() {
@@ -175,6 +171,9 @@
 
         function updateLips(landmarks) {
             lipMesh.visible = true;
+
+            // --- 1. SUAVIZAÇÃO DE MOVIMENTO ---
+            // Aumente para 0.95 para seguir o rosto mais rápido. Diminua para 0.7 para ser mais lento.
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
@@ -186,23 +185,39 @@
             const center = smoothed[13];
             const shape = new THREE.Shape();
 
+            // --- 2. REGULAGEM DO CONTORNO EXTERNO (BORDA) ---
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
-                let sY = 1.02;
+
+                // LARGURA DA BOCA: Aumente o sX (ex: 1.2) para esticar mais para os lados.
                 let sX = 1.15;
+
+                // ALTURA GERAL: Aumente o sY (ex: 1.1) para deixar os lábios mais grossos.
+                let sY = 1.02;
+
+                // ARCO DO CUPIDO (TOPO): Diminua (ex: 0.98) para descer a cor e não subir na pele.
                 if (id === 37 || id === 0 || id === 267) sY = 1.0;
+
+                // LÁBIO INFERIOR (BASE): Diminua (ex: 0.98) para levantar a cor e não descer no queixo.
                 if (id === 17) sY = 1.0;
+
                 const x = center.x + (p.x - center.x) * sX;
                 const y = center.y + (p.y - center.y) * sY;
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
             });
 
+            // --- 3. REGULAGEM DO FURO INTERNO (LIMPEZA DOS DENTES) ---
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
-                let sY_inner = 1.05;
+
+                // LARGURA DO FURO: Deve ser igual ao sX do contorno acima.
                 let sX_inner = 1.15;
+
+                // LIMPEZA DOS DENTES: Aumente este sY (ex: 1.08 ou 1.10) para remover a cor dos dentes.
+                let sY_inner = 1.05;
+
                 const x = center.x + (p.x - center.x) * sX_inner;
                 const y = center.y + (p.y - center.y) * sY_inner;
                 if (i === 0) hole.moveTo(x, 1 - y);
@@ -210,9 +225,12 @@
             });
             shape.holes = [hole];
 
+            // --- 4. QUALIDADE DO SHAPE ---
+            // Mude de 8 para 12 se quiser bordas mais arredondadas e suaves.
             if (lipMesh.geometry) lipMesh.geometry.dispose();
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 8);
 
+            // Mapeamento UV e renderização final
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
             const size = new THREE.Vector3(); bBox.getSize(size);
@@ -225,7 +243,6 @@
             renderer.render(scene, camera);
         }
 
-        // Funções globais para os botões e slider
         window.changeColor = (hex, el) => {
             lipMaterial.uniforms.uColor.value.setHex(hex);
             document.querySelectorAll(".swatch").forEach(s => s.classList.remove("active"));
