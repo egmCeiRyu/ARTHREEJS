@@ -193,10 +193,10 @@
                 let sX = 1.05;
 
                 // ALTURA GERAL: Aumente o sY (ex: 1.1) para deixar os lábios mais grossos.
-                let sY = 0.5;
+                let sY = 0.2;
 
                 // ARCO DO CUPIDO (TOPO): Diminua (ex: 0.98) para descer a cor e não subir na pele.
-                if (id === 37 || id === 0 || id === 267) sY = 1.05;
+                if (id === 37 || id === 0 || id === 267) sY = 1.10;
 
                 // LÁBIO INFERIOR (BASE): Diminua (ex: 0.98) para levantar a cor e não descer no queixo.
                 if (id === 17) sY = 0.95;
@@ -228,7 +228,7 @@
             // --- 4. QUALIDADE DO SHAPE ---
             // Mude de 8 para 12 se quiser bordas mais arredondadas e suaves*(SUBDIVISOES).
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 12);
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 16);
 
             // Mapeamento UV e renderização final
             const pos = lipMesh.geometry.attributes.position;
