@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Sharp Concave Shape</title>
+    <title>AR Lipstick - Angel Wing Convex Shape</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -73,6 +73,7 @@
             .swatch.active {
                 border-color: #fff;
                 transform: scale(1.1);
+                box-shadow: 0 0 15px rgba(255,255,255,.2);
             }
 
         input[type=range] {
@@ -97,7 +98,7 @@
             <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
             <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
         </div>
-        <div style="width:100%;">
+        <div class="slider-container" style="width: 100%;">
             <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
             <div style="display:flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 5px;">
                 <span>NATURAL</span><span id="int-val">60%</span><span>VIVID</span>
@@ -180,16 +181,16 @@
             const center = smoothed[13];
             const shape = new THREE.Shape();
 
-            // --- AJUSTE CÔNCAVO ---
+            // --- AJUSTE CONVEXO "ANJO" ---
             // Aumentamos o scaleX (horizontal) para 1.15.
-            // No scaleY, aplicamos um fator que empurra o topo para baixo (côncavo)
+            // No scaleY, aplicamos um fator que empurra o topo para CIMA (convexo)
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
                 let sY = 1.02;
 
                 // Pontos do Arco do Cupido (37, 0, 267)
-                // Reduzimos a escala vertical para esses pontos específicos para criar a concavidade
-                if (id === 37 || id === 0 || id === 267) sY = 0.96;
+                // Aumentamos a escala vertical para esses pontos específicos para criar a convexidade
+                if (id === 37 || id === 0 || id === 267) sY = 1.08;
 
                 const x = center.x + (p.x - center.x) * 1.15;
                 const y = center.y + (p.y - center.y) * sY;
