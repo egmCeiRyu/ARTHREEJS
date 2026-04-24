@@ -3,84 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick Pro - Custom Regulation</title>
+    <title>AR Lipstick Pro - Smooth Arc & Stable Gloss</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        :root {
-            --accent: #ff4d6d;
-        }
-
-        body {
-            margin: 0;
-            background: #050505;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            font-family: sans-serif;
-            color: #fff;
-        }
-
-        #container {
-            position: relative;
-            width: 640px;
-            height: 480px;
-            border-radius: 30px;
-            overflow: hidden;
-            border: 1px solid #333;
-            box-shadow: 0 20px 60px rgba(0,0,0,.8);
-        }
-
-        video, #three_container {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            transform: scaleX(-1);
-            object-fit: cover;
-        }
-
-        .ui-panel {
-            margin-top: 25px;
-            background: rgba(20,20,20,.95);
-            padding: 20px;
-            border-radius: 25px;
-            width: 550px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            border: 1px solid #444;
-            backdrop-filter: blur(10px);
-        }
-
-        .swatches {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .swatch {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 3px solid transparent;
-            transition: .2s;
-        }
-
-            .swatch.active {
-                border-color: #fff;
-                transform: scale(1.1);
-                box-shadow: 0 0 15px rgba(255,255,255,.2);
-            }
-
-        input[type=range] {
-            width: 100%;
-            accent-color: var(--accent);
-            cursor: pointer;
-        }
+        :root { --accent: #ff4d6d; }
+        body { margin: 0; background: #050505; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #fff; }
+        #container { position: relative; width: 640px; height: 480px; border-radius: 30px; overflow: hidden; border: 1px solid #333; box-shadow: 0 20px 60px rgba(0,0,0,.8); }
+        video, #three_container { position: absolute; width: 100%; height: 100%; transform: scaleX(-1); object-fit: cover; }
+        .ui-panel { margin-top: 25px; background: rgba(20,20,20,.95); padding: 20px; border-radius: 25px; width: 550px; display: flex; flex-direction: column; align-items: center; border: 1px solid #444; backdrop-filter: blur(10px); }
+        .swatches { display: flex; gap: 15px; margin-bottom: 20px; }
+        .swatch { width: 38px; height: 38px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: .2s; }
+        .swatch.active { border-color: #fff; transform: scale(1.1); box-shadow: 0 0 15px rgba(255,255,255,.2); }
+        input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
     </style>
 </head>
 <body>
@@ -132,53 +67,25 @@
             renderer.setSize(640, 480);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-lipMaterial = new THREE.ShaderMaterial({
+            lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
-                uniforms: {
-                    uColor: { value: new THREE.Color(0xbe1e2d) },
-                    uOpacity: { value: 0.58 }
-                },
-                vertexShader: `
-                    varying vec2 vUv;
-                    void main() {
-                        vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                    }
-                `,
+                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.58 } },
+                vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
                 fragmentShader: `
-                    uniform vec3 uColor;
-                    uniform float uOpacity;
-                    varying vec2 vUv;
-
+                    uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
                     void main() {
-                        // 1. MÁSCARA DE BORDA (Feathering suave)
+                        // Máscara com feathering maior para suavizar a borda abaixada
                         float mask = smoothstep(0.0, 0.1, vUv.x) * smoothstep(1.0, 0.9, vUv.x) *
-                                     smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
+                                     smoothstep(0.0, 0.2, vUv.y) * smoothstep(1.0, 0.8, vUv.y);
 
-                        // 2. VOLUME 3D (Escurece as bordas e dobras)
-                        float centerShadow = smoothstep(0.0, 0.5, abs(vUv.y - 0.5));
-                        float occ = mix(0.6, 1.0, centerShadow);
+                        float occ = mix(0.7, 1.0, smoothstep(0.0, 0.45, abs(vUv.y - 0.5)));
 
-                        // 3. GLOSS ALTA FIDELIDADE (Suave e volumoso)
-                        // Criamos dois pontos de luz ovais (não riscos)
-                        vec2 glossPos1 = vec2(0.5, 0.72); // Brilho no lábio superior
-                        vec2 glossPos2 = vec2(0.5, 0.28); // Brilho no lábio inferior
+                        // GLOSS TRAVADO NO UV (Não pula mais)
+                        float upGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.78)) * 3.0), 4.0) * 0.4;
+                        float loGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.22)) * 3.5), 5.0) * 0.4;
                         
-                        // Ajuste de proporção para o brilho ficar oval e não redondo
-                        float dist1 = length((vUv - glossPos1) * vec2(1.0, 2.5));
-                        float dist2 = length((vUv - glossPos2) * vec2(1.0, 2.0));
-
-                        float gloss = pow(max(0.0, 1.0 - dist1 * 3.0), 4.0) * 0.5;
-                        gloss += pow(max(0.0, 1.0 - dist2 * 2.5), 3.0) * 0.4;
-
-                        // 4. REFLEXO DE BORDA (Fresnel suave)
-                        float rim = pow(1.0 - mask, 3.0) * 0.1;
-
-                        // COMPOSIÇÃO FINAL
-                        vec3 color = uColor * occ;
-                        color += vec3(0.9, 0.9, 1.0) * (gloss + rim); // Brilho levemente azulado/branco para realismo
-
-                        gl_FragColor = vec4(color, mask * uOpacity);
+                        vec3 color = uColor * occ + (vec3(0.95, 0.95, 1.0) * (upGloss + loGloss));
+                        gl_FragColor = vec4(color, uOpacity * mask);
                     }
                 `
             });
@@ -204,73 +111,57 @@ lipMaterial = new THREE.ShaderMaterial({
             video.requestVideoFrameCallback(loop);
         }
 
-function updateLips(landmarks) {
+        function updateLips(landmarks) {
             lipMesh.visible = true;
 
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
-                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.95;
-                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.95;
+                    smoothed[i].x += (landmarks[i].x - smoothed[i].x) * 0.80; // Suavização extra
+                    smoothed[i].y += (landmarks[i].y - smoothed[i].y) * 0.80;
                 }
             }
 
             const center = smoothed[13];
             const shape = new THREE.Shape();
-
-            // --- 2. PAINEL DE CONTROLE DO SHAPE EXTERNO ---
+            
+            // --- REGULAGEM DO SHAPE EXTERNO ---
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
+                let sX = 1.15; // Largura esticada
+                let sY = 1.0;  // Altura natural
 
-                let sX = 1.12; // LARGURA TOTAL: (Estica os cantos para os lados)
-                let sY = 1.00; // ALTURA BASE: (Volume geral)
-
-                // --- CONTROLE INDIVIDUAL POR PONTO ---
-                
-                // 1. ARCO DO CUPIDO (Pontos superiores centrais)
-                // Aumente para 1.05+ para CONVEXO (subir) | Diminua para 0.95- para CÔNCAVO (descer)
-                if (id === 37 || id === 0 || id === 267) {
-                    sY = 0.95; 
+                // ABAIXAR AS "ASAS" DO ARCO (Conforme seu desenho)
+                // Reduzimos o sY para esses pontos subirem menos na pele
+                if (id === 40 || id === 39 || id === 269 || id === 270) {
+                    sY = 0.94; 
                 }
 
-                // 2. BASE INFERIOR (Ponto central de baixo)
-                // Aumente para 1.10+ para deixar o lábio de baixo mais "caído/volumoso"
-                if (id === 17) {
-                    sY = 1.02;
-                }
-
-                // 3. LATERAIS SUPERIORES (As "asas" do lábio de cima)
-                if (id === 185 || id === 40 || id === 269 || id === 270) {
-                    sY = 0.95;
+                // CENTRO DO ARCO (O "V")
+                if (id === 0) {
+                    sY = 0.92;
                 }
 
                 const x = center.x + (p.x - center.x) * sX;
                 const y = center.y + (p.y - center.y) * sY;
-                
                 if (i === 0) shape.moveTo(x, 1 - y);
                 else shape.lineTo(x, 1 - y);
             });
 
-            // --- 3. REGULAGEM DO FURO INTERNO (LIMPEZA DOS DENTES) ---
             const hole = new THREE.Path();
             INNER.forEach((id, i) => {
                 const p = smoothed[id];
-
-                let sX_inner = 1.12; // Deve acompanhar o sX externo
-                let sY_inner = 1.08; // LIMPEZA: Aumente para "empurrar" o batom para fora dos dentes
-
-                const x = center.x + (p.x - center.x) * sX_inner;
+                // Limpeza dos dentes acompanhando a escala
+                let sY_inner = 1.05; 
+                const x = center.x + (p.x - center.x) * 1.15;
                 const y = center.y + (p.y - center.y) * sY_inner;
-                
                 if (i === 0) hole.moveTo(x, 1 - y);
                 else hole.lineTo(x, 1 - y);
             });
             shape.holes = [hole];
 
-            // --- 4. QUALIDADE E RENDERIZAÇÃO ---
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            // Subdivisões: 16 para curvas suaves, 32 para perfeição total
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 24);
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 16); // Alta qualidade
 
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
