@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Pro Realism Fix</title>
+    <title>AR Lipstick - Glossiness Restored</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -99,9 +99,9 @@
             <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
         </div>
         <div class="slider-container" style="width: 100%;">
-            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.5" oninput="updateOpacity(this.value)">
+            <input type="range" id="opacitySlider" min="0.1" max="1" step="0.01" value="0.6" oninput="updateOpacity(this.value)">
             <div style="display:flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 5px;">
-                <span>NATURAL</span><span id="int-val">50%</span><span>VIVID</span>
+                <span>NATURAL</span><span id="int-val">60%</span><span>VIVID</span>
             </div>
         </div>
     </div>
@@ -132,13 +132,12 @@
             renderer.setSize(640, 480);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-            // --- SHADER DE FUSÃO DE PELE (Ultra Realismo) ---
-            // Este shader preserva a textura da pele e apenas muda a tonalidade.
+            // --- SHADER COM GLOSSINES POTENTE ---
             lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
                 uniforms: {
                     uColor: { value: new THREE.Color(0xbe1e2d) },
-                    uOpacity: { value: 0.5 }
+                    uOpacity: { value: 0.6 }
                 },
                 vertexShader: `
                         varying vec2 vUv;
@@ -152,17 +151,20 @@
                         uniform float uOpacity;
                         varying vec2 vUv;
                         void main() {
-                            // Gradiente radial para simular volume central sem distorcer a geometria
-                            float dist = distance(vUv, vec2(0.5, 0.5));
+                            // 1. Oclusão central (profundidade)
+                            float occlusion = mix(0.4, 1.0, smoothstep(0.0, 0.45, abs(vUv.y - 0.5)));
 
-                            // Brilho suave e central (Gloss)
-                            float gloss = pow(1.0 - abs(vUv.y - 0.5) * 2.0, 4.0) * 0.15;
+                            // 2. Glossines (Brilho de Luz Estilo Banuba)
+                            // Criamos um brilho mais forte no centro dos lábios
+                            float gloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.5)) * 2.2), 6.0) * 0.45;
 
-                            // Composição de cor com fusão de textura
-                            vec3 finalColor = uColor + (vec3(1.0) * gloss);
+                            // 3. Reflexo Secundário (Aspecto de lábio molhado)
+                            float wetLook = pow(max(0.0, 1.0 - abs(vUv.y - 0.7) * 5.0), 3.0) * 0.15;
 
-                            // Suavização das bordas para fundir com a pele real
-                            float edgeFade = smoothstep(0.0, 0.05, vUv.x) * smoothstep(1.0, 0.95, vUv.x) * smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
+                            vec3 finalColor = (uColor * occlusion) + (vec3(1.0) * (gloss + wetLook));
+
+                            // 4. Suavização das bordas
+                            float edgeFade = smoothstep(0.0, 0.05, vUv.x) * smoothstep(1.0, 0.95, vUv.x) * smoothstep(0.0, 0.1, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
 
                             gl_FragColor = vec4(finalColor, uOpacity * edgeFade);
                         }
@@ -187,9 +189,6 @@
                 const result = faceLandmarker.detectForVideo(video, performance.now());
                 if (result.faceLandmarks && result.faceLandmarks[0]) {
                     updateLips(result.faceLandmarks[0]);
-                } else {
-                    lipMesh.visible = false;
-                    renderer.render(scene, camera);
                 }
             }
             video.requestVideoFrameCallback(loop);
@@ -197,7 +196,6 @@
 
         function updateLips(landmarks) {
             lipMesh.visible = true;
-            // Suavização do movimento
             if (!smoothed) smoothed = landmarks.map(p => ({ x: p.x, y: p.y }));
             else {
                 for (let i = 0; i < landmarks.length; i++) {
@@ -209,9 +207,7 @@
             const center = smoothed[13];
             const shape = new THREE.Shape();
 
-            // --- GEOMETRIA PURA E ANATÔMICA (Sem Escala ou Simetria Forçada) ---
-            // Usamos uma escala micro (1.01) apenas para garantir que a geometria
-            // cubra a linha óssea do MediaPipe, mas sem expandir para fora da boca.
+            // Geometria precisa 1:1 com a boca
             OUTER.forEach((id, i) => {
                 const p = smoothed[id];
                 const x = center.x + (p.x - center.x) * 1.01;
@@ -231,7 +227,6 @@
             if (lipMesh.geometry) lipMesh.geometry.dispose();
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 4);
 
-            // Mapeamento UV preciso para o Shader
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
             const size = new THREE.Vector3(); bBox.getSize(size);
