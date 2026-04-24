@@ -1,508 +1,510 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick - Banuba Pro Clean Hole Fix</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AR Lipstick - Banuba Pro Clean Hole Fix</title>
 
-    <style>
-        :root {
-            --accent: #ff4d6d;
-        }
+<style>
+:root{
+    --accent:#ff4d6d;
+}
 
-        body {
-            margin: 0;
-            background: #050505;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            font-family: sans-serif;
-            color: #fff;
-        }
+body{
+    margin:0;
+    background:#050505;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    height:100vh;
+    font-family:sans-serif;
+    color:#fff;
+}
 
-        #container {
-            position: relative;
-            width: 640px;
-            height: 480px;
-            border-radius: 30px;
-            overflow: hidden;
-            border: 1px solid #333;
-            box-shadow: 0 20px 60px rgba(0,0,0,.8);
-        }
+#container{
+    position:relative;
+    width:640px;
+    height:480px;
+    border-radius:30px;
+    overflow:hidden;
+    border:1px solid #333;
+    box-shadow:0 20px 60px rgba(0,0,0,.8);
+}
 
-        video,
-        #three_container {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            transform: scaleX(-1);
-            object-fit: cover;
-        }
+video,
+#three_container{
+    position:absolute;
+    width:100%;
+    height:100%;
+    top:0;
+    left:0;
+    transform:scaleX(-1);
+    object-fit:cover;
+}
 
-        .ui-panel {
-            margin-top: 25px;
-            background: rgba(20,20,20,.95);
-            padding: 20px;
-            border-radius: 25px;
-            width: 550px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            border: 1px solid #444;
-            backdrop-filter: blur(10px);
-        }
+.ui-panel{
+    margin-top:25px;
+    background:rgba(20,20,20,.95);
+    padding:20px;
+    border-radius:25px;
+    width:550px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    border:1px solid #444;
+    backdrop-filter:blur(10px);
+}
 
-        .swatches {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
+.swatches{
+    display:flex;
+    gap:15px;
+    margin-bottom:20px;
+}
 
-        .swatch {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 3px solid transparent;
-            transition: .2s;
-        }
+.swatch{
+    width:38px;
+    height:38px;
+    border-radius:50%;
+    cursor:pointer;
+    border:3px solid transparent;
+    transition:.2s;
+}
 
-            .swatch.active {
-                border-color: #fff;
-                transform: scale(1.1);
-            }
+.swatch.active{
+    border-color:#fff;
+    transform:scale(1.1);
+}
 
-        input[type=range] {
-            width: 100%;
-            accent-color: var(--accent);
-            cursor: pointer;
-        }
-    </style>
+input[type=range]{
+    width:100%;
+    accent-color:var(--accent);
+    cursor:pointer;
+}
+</style>
 </head>
 
 <body>
 
-    <div id="container">
-        <video id="webcam" autoplay playsinline muted></video>
-        <div id="three_container"></div>
+<div id="container">
+    <video id="webcam" autoplay playsinline muted></video>
+    <div id="three_container"></div>
+</div>
+
+<div class="ui-panel">
+
+    <div class="swatches">
+        <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
+        <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
+        <div class="swatch" style="background:#f28b82" onclick="changeColor(0xf28b82,this)"></div>
+        <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
+        <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
     </div>
 
-    <div class="ui-panel">
+    <div style="width:100%;">
+        <input
+            type="range"
+            id="opacitySlider"
+            min="0.1"
+            max="1"
+            step="0.01"
+            value="0.58"
+            oninput="updateOpacity(this.value)"
+        >
 
-        <div class="swatches">
-            <div class="swatch active" style="background:#be1e2d" onclick="changeColor(0xbe1e2d,this)"></div>
-            <div class="swatch" style="background:#ff4d6d" onclick="changeColor(0xff4d6d,this)"></div>
-            <div class="swatch" style="background:#f28b82" onclick="changeColor(0xf28b82,this)"></div>
-            <div class="swatch" style="background:#4a0e1e" onclick="changeColor(0x4a0e1e,this)"></div>
-            <div class="swatch" style="background:#000000" onclick="changeColor(0x000000,this)"></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:6px;">
+            <span>NATURAL</span>
+            <span id="int-val">58%</span>
+            <span>VIVID</span>
         </div>
-
-        <div style="width:100%;">
-            <input type="range"
-                   id="opacitySlider"
-                   min="0.1"
-                   max="1"
-                   step="0.01"
-                   value="0.58"
-                   oninput="updateOpacity(this.value)">
-
-            <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:6px;">
-                <span>NATURAL</span>
-                <span id="int-val">58%</span>
-                <span>VIVID</span>
-            </div>
-        </div>
-
     </div>
 
-    <script type="module">
-
-        import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js";
-
-        import {
-            FaceLandmarker,
-            FilesetResolver
-        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
-
-        window.addEventListener("DOMContentLoaded", () => {
-
-            const video = document.getElementById("webcam");
-            const container3d = document.getElementById("three_container");
-
-            let faceLandmarker;
-            let scene, camera, renderer;
-            let lipMesh, lipMaterial;
-
-            let smoothed = null;
-            let lastVideoTime = -1;
-
-            /* CONTORNO EXTERNO */
-            const OUTER = [
-                61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
-                408, 270, 269, 267, 0, 37, 39, 40, 185, 61
-            ];
-
-            /* ABERTURA INTERNA */
-            const INNER = [
-                78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
-                415, 310, 311, 312, 13, 82, 81, 80, 191, 78
-            ];
-
-            init();
-
-            async function init() {
-
-                const filesetResolver =
-                    await FilesetResolver.forVisionTasks(
-                        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-                    );
-
-                faceLandmarker =
-                    await FaceLandmarker.createFromOptions(filesetResolver, {
-                        baseOptions: {
-                            modelAssetPath:
-                                "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                            delegate: "GPU"
-                        },
-                        runningMode: "VIDEO",
-                        numFaces: 1
-                    });
-
-                scene = new THREE.Scene();
-
-                camera =
-                    new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
-
-                camera.position.z = 1;
-
-                renderer =
-                    new THREE.WebGLRenderer({
-                        alpha: true,
-                        antialias: true
-                    });
-
-                renderer.setSize(640, 480);
-                renderer.setPixelRatio(window.devicePixelRatio);
-
-                container3d.appendChild(renderer.domElement);
-
-                lipMaterial =
-                    new THREE.ShaderMaterial({
-
-                        transparent: true,
-                        side: THREE.DoubleSide,
-                        depthWrite: false,
-
-                        uniforms: {
-                            uColor: { value: new THREE.Color(0xbe1e2d) },
-                            uOpacity: { value: 0.58 }
-                        },
-
-                        vertexShader: `
-
-                    varying vec2 vUv;
-
-                    void main(){
-
-                        vUv = uv;
-
-                        gl_Position =
-                            projectionMatrix *
-                            modelViewMatrix *
-                            vec4(position,1.0);
-                    }
-
-                `,
-
-                        fragmentShader: `
-
-                    uniform vec3 uColor;
-                    uniform float uOpacity;
-
-                    varying vec2 vUv;
-
-                    void main(){
-
-                        float mask =
-                            smoothstep(0.0,0.08,vUv.x) *
-                            smoothstep(1.0,0.92,vUv.x) *
-                            smoothstep(0.0,0.12,vUv.y) *
-                            smoothstep(1.0,0.88,vUv.y);
-
-                        /* REMOVE COR DENTRO DA BOCA */
-
-                        float centerX =
-                            1.0 - abs(vUv.x - 0.5) * 2.0;
-
-                        float centerY =
-                            1.0 - abs(vUv.y - 0.5) * 2.0;
-
-                        centerX = pow(centerX,1.3);
-                        centerY = pow(centerY,3.8);
-
-                        float mouthHole =
-                            centerX * centerY;
-
-                        mask *= (1.0 - mouthHole);
-
-                        /* SOMBRA NATURAL */
-
-                        float occlusion =
-                            mix(
-                                0.62,
-                                1.0,
-                                smoothstep(
-                                    0.0,
-                                    0.55,
-                                    abs(vUv.y - 0.5)
-                                )
-                            );
-
-                        /* GLOSS SUAVE */
-
-                        float gloss =
-                            pow(
-                                max(
-                                    0.0,
-                                    1.0 - distance(vUv,vec2(0.5,0.78))*4.0
-                                ),
-                                4.0
-                            ) * 0.16;
-
-                        vec3 col =
-                            uColor * occlusion +
-                            vec3(gloss);
-
-                        gl_FragColor =
-                            vec4(col,mask*uOpacity);
-                    }
-
-                `
-                    });
-
-                lipMesh =
-                    new THREE.Mesh(
-                        new THREE.BufferGeometry(),
-                        lipMaterial
-                    );
-
-                scene.add(lipMesh);
-
-                startCamera();
-            }
-
-            function startCamera() {
-
-                navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: 640,
-                        height: 480,
-                        frameRate: { ideal: 60, max: 60 }
-                    }
-                }).then(stream => {
-
-                    video.srcObject = stream;
-                    video.requestVideoFrameCallback(loop);
-
-                });
-            }
-
-            function loop() {
-
-                if (video.currentTime !== lastVideoTime) {
-
-                    lastVideoTime = video.currentTime;
-
-                    const result =
-                        faceLandmarker.detectForVideo(
-                            video,
-                            performance.now()
-                        );
-
-                    if (result.faceLandmarks &&
-                        result.faceLandmarks[0]) {
-
-                        updateLips(
-                            result.faceLandmarks[0]
-                        );
-                    }
-                }
-
-                video.requestVideoFrameCallback(loop);
-            }
-
-            /* SPLINE SUAVE */
-            function getSplinePoints(indices, landmarks, center, scale) {
-
-                const points =
-                    indices.map(id => {
-
-                        const p = landmarks[id];
-
-                        return new THREE.Vector3(
-                            center.x + (p.x - center.x) * scale,
-                            1 - (center.y + (p.y - center.y) * scale),
-                            0
-                        );
-                    });
-
-                const curve =
-                    new THREE.CatmullRomCurve3(points);
-
-                curve.closed = true;
-
-                return curve.getPoints(indices.length * 8);
-            }
-
-            function updateLips(landmarks) {
-
-                lipMesh.visible = true;
-
-                if (!smoothed) {
-
-                    smoothed =
-                        landmarks.map(p => ({
-                            x: p.x,
-                            y: p.y
-                        }));
-
-                } else {
-
-                    for (let i = 0; i < landmarks.length; i++) {
-
-                        smoothed[i].x +=
-                            (landmarks[i].x - smoothed[i].x) * 0.95;
-
-                        smoothed[i].y +=
-                            (landmarks[i].y - smoothed[i].y) * 0.95;
-                    }
-                }
-
-                const center = smoothed[13];
-
-                const outerSpline =
-                    getSplinePoints(
-                        OUTER,
-                        smoothed,
-                        center,
-                        1.015
-                    );
-
-                /* HOLE MAIOR */
-                const innerSpline =
-                    getSplinePoints(
-                        INNER,
-                        smoothed,
-                        center,
-                        1.08
-                    );
-
-                const mouthShape =
-                    new THREE.Shape();
-
-                mouthShape.moveTo(
-                    outerSpline[0].x,
-                    outerSpline[0].y
-                );
-
-                outerSpline.forEach(p => {
-                    mouthShape.lineTo(p.x, p.y);
-                });
-
-                const holePath =
-                    new THREE.Path();
-
-                holePath.moveTo(
-                    innerSpline[0].x,
-                    innerSpline[0].y
-                );
-
-                for (let i = innerSpline.length - 1; i >= 0; i--) {
-                    holePath.lineTo(
-                        innerSpline[i].x,
-                        innerSpline[i].y
-                    );
-                }
-
-                mouthShape.holes = [holePath];
-
-                if (lipMesh.geometry)
-                    lipMesh.geometry.dispose();
-
-                lipMesh.geometry =
-                    new THREE.ShapeGeometry(
-                        mouthShape,
-                        4
-                    );
-
-                /* UV */
-
-                const pos =
-                    lipMesh.geometry.attributes.position;
-
-                const box =
-                    new THREE.Box3()
-                        .setFromBufferAttribute(pos);
-
-                const size =
-                    new THREE.Vector3();
-
-                box.getSize(size);
-
-                const uv =
-                    new Float32Array(
-                        pos.count * 2
-                    );
-
-                for (let i = 0; i < pos.count; i++) {
-
-                    uv[i * 2] =
-                        (pos.getX(i) - box.min.x) / size.x;
-
-                    uv[i * 2 + 1] =
-                        (pos.getY(i) - box.min.y) / size.y;
-                }
-
-                lipMesh.geometry.setAttribute(
-                    "uv",
-                    new THREE.BufferAttribute(uv, 2)
-                );
-
-                renderer.render(scene, camera);
-            }
-
-            /* UI */
-
-            window.changeColor = (hex, el) => {
-
-                lipMaterial.uniforms.uColor.value
-                    .setHex(hex);
-
-                document
-                    .querySelectorAll(".swatch")
-                    .forEach(s => s.classList.remove("active"));
-
-                el.classList.add("active");
-            };
-
-            window.updateOpacity = (v) => {
-
-                lipMaterial.uniforms.uOpacity.value =
-                    parseFloat(v);
-
-                document.getElementById("int-val")
-                    .innerText =
-                    Math.round(v * 100) + "%";
-            };
-
+</div>
+
+<script type="module">
+
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js";
+
+import {
+    FaceLandmarker,
+    FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
+
+window.addEventListener("DOMContentLoaded",()=>{
+
+const video = document.getElementById("webcam");
+const container3d = document.getElementById("three_container");
+
+let faceLandmarker;
+let scene,camera,renderer;
+let lipMesh,lipMaterial;
+
+let smoothed = null;
+let lastVideoTime = -1;
+
+/* CONTORNO EXTERNO */
+const OUTER = [
+61,146,91,181,84,17,314,405,321,375,291,
+408,270,269,267,0,37,39,40,185,61
+];
+
+/* ABERTURA INTERNA */
+const INNER = [
+78,95,88,178,87,14,317,402,318,324,308,
+415,310,311,312,13,82,81,80,191,78
+];
+
+init();
+
+async function init(){
+
+    const filesetResolver =
+        await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+        );
+
+    faceLandmarker =
+        await FaceLandmarker.createFromOptions(filesetResolver,{
+            baseOptions:{
+                modelAssetPath:
+                "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                delegate:"GPU"
+            },
+            runningMode:"VIDEO",
+            numFaces:1
         });
 
-    </script>
+    scene = new THREE.Scene();
+
+    camera =
+        new THREE.OrthographicCamera(0,1,1,0,0.1,10);
+
+    camera.position.z = 1;
+
+    renderer =
+        new THREE.WebGLRenderer({
+            alpha:true,
+            antialias:true
+        });
+
+    renderer.setSize(640,480);
+    renderer.setPixelRatio(window.devicePixelRatio);
+
+    container3d.appendChild(renderer.domElement);
+
+    lipMaterial =
+        new THREE.ShaderMaterial({
+
+            transparent:true,
+            side:THREE.DoubleSide,
+            depthWrite:false,
+
+            uniforms:{
+                uColor:{ value:new THREE.Color(0xbe1e2d) },
+                uOpacity:{ value:0.58 }
+            },
+
+            vertexShader:`
+
+                varying vec2 vUv;
+
+                void main(){
+
+                    vUv = uv;
+
+                    gl_Position =
+                        projectionMatrix *
+                        modelViewMatrix *
+                        vec4(position,1.0);
+                }
+
+            `,
+
+            fragmentShader:`
+
+                uniform vec3 uColor;
+                uniform float uOpacity;
+
+                varying vec2 vUv;
+
+                void main(){
+
+                    float mask =
+                        smoothstep(0.0,0.08,vUv.x) *
+                        smoothstep(1.0,0.92,vUv.x) *
+                        smoothstep(0.0,0.12,vUv.y) *
+                        smoothstep(1.0,0.88,vUv.y);
+
+                    /* REMOVE COR DENTRO DA BOCA */
+
+                    float centerX =
+                        1.0 - abs(vUv.x - 0.5) * 2.0;
+
+                    float centerY =
+                        1.0 - abs(vUv.y - 0.5) * 2.0;
+
+                    centerX = pow(centerX,1.3);
+                    centerY = pow(centerY,3.8);
+
+                    float mouthHole =
+                        centerX * centerY;
+
+                    mask *= (1.0 - mouthHole);
+
+                    /* SOMBRA NATURAL */
+
+                    float occlusion =
+                        mix(
+                            0.62,
+                            1.0,
+                            smoothstep(
+                                0.0,
+                                0.55,
+                                abs(vUv.y - 0.5)
+                            )
+                        );
+
+                    /* GLOSS SUAVE */
+
+                    float gloss =
+                        pow(
+                            max(
+                                0.0,
+                                1.0 - distance(vUv,vec2(0.5,0.78))*4.0
+                            ),
+                            4.0
+                        ) * 0.16;
+
+                    vec3 col =
+                        uColor * occlusion +
+                        vec3(gloss);
+
+                    gl_FragColor =
+                        vec4(col,mask*uOpacity);
+                }
+
+            `
+        });
+
+    lipMesh =
+        new THREE.Mesh(
+            new THREE.BufferGeometry(),
+            lipMaterial
+        );
+
+    scene.add(lipMesh);
+
+    startCamera();
+}
+
+function startCamera(){
+
+    navigator.mediaDevices.getUserMedia({
+        video:{
+            width:640,
+            height:480,
+            frameRate:{ ideal:60,max:60 }
+        }
+    }).then(stream=>{
+
+        video.srcObject = stream;
+        video.requestVideoFrameCallback(loop);
+
+    });
+}
+
+function loop(){
+
+    if(video.currentTime !== lastVideoTime){
+
+        lastVideoTime = video.currentTime;
+
+        const result =
+            faceLandmarker.detectForVideo(
+                video,
+                performance.now()
+            );
+
+        if(result.faceLandmarks &&
+           result.faceLandmarks[0]){
+
+            updateLips(
+                result.faceLandmarks[0]
+            );
+        }
+    }
+
+    video.requestVideoFrameCallback(loop);
+}
+
+/* SPLINE SUAVE */
+function getSplinePoints(indices,landmarks,center,scale){
+
+    const points =
+        indices.map(id=>{
+
+            const p = landmarks[id];
+
+            return new THREE.Vector3(
+                center.x + (p.x-center.x)*scale,
+                1 - (center.y + (p.y-center.y)*scale),
+                0
+            );
+        });
+
+    const curve =
+        new THREE.CatmullRomCurve3(points);
+
+    curve.closed = true;
+
+    return curve.getPoints(indices.length * 8);
+}
+
+function updateLips(landmarks){
+
+    lipMesh.visible = true;
+
+    if(!smoothed){
+
+        smoothed =
+            landmarks.map(p=>({
+                x:p.x,
+                y:p.y
+            }));
+
+    }else{
+
+        for(let i=0;i<landmarks.length;i++){
+
+            smoothed[i].x +=
+                (landmarks[i].x-smoothed[i].x)*0.95;
+
+            smoothed[i].y +=
+                (landmarks[i].y-smoothed[i].y)*0.95;
+        }
+    }
+
+    const center = smoothed[13];
+
+    const outerSpline =
+        getSplinePoints(
+            OUTER,
+            smoothed,
+            center,
+            1.015
+        );
+
+    /* HOLE MAIOR */
+    const innerSpline =
+        getSplinePoints(
+            INNER,
+            smoothed,
+            center,
+            1.08
+        );
+
+    const mouthShape =
+        new THREE.Shape();
+
+    mouthShape.moveTo(
+        outerSpline[0].x,
+        outerSpline[0].y
+    );
+
+    outerSpline.forEach(p=>{
+        mouthShape.lineTo(p.x,p.y);
+    });
+
+    const holePath =
+        new THREE.Path();
+
+    holePath.moveTo(
+        innerSpline[0].x,
+        innerSpline[0].y
+    );
+
+    for(let i=innerSpline.length-1;i>=0;i--){
+        holePath.lineTo(
+            innerSpline[i].x,
+            innerSpline[i].y
+        );
+    }
+
+    mouthShape.holes = [holePath];
+
+    if(lipMesh.geometry)
+        lipMesh.geometry.dispose();
+
+    lipMesh.geometry =
+        new THREE.ShapeGeometry(
+            mouthShape,
+            4
+        );
+
+    /* UV */
+
+    const pos =
+        lipMesh.geometry.attributes.position;
+
+    const box =
+        new THREE.Box3()
+        .setFromBufferAttribute(pos);
+
+    const size =
+        new THREE.Vector3();
+
+    box.getSize(size);
+
+    const uv =
+        new Float32Array(
+            pos.count * 2
+        );
+
+    for(let i=0;i<pos.count;i++){
+
+        uv[i*2] =
+            (pos.getX(i)-box.min.x)/size.x;
+
+        uv[i*2+1] =
+            (pos.getY(i)-box.min.y)/size.y;
+    }
+
+    lipMesh.geometry.setAttribute(
+        "uv",
+        new THREE.BufferAttribute(uv,2)
+    );
+
+    renderer.render(scene,camera);
+}
+
+/* UI */
+
+window.changeColor = (hex,el)=>{
+
+    lipMaterial.uniforms.uColor.value
+        .setHex(hex);
+
+    document
+        .querySelectorAll(".swatch")
+        .forEach(s=>s.classList.remove("active"));
+
+    el.classList.add("active");
+};
+
+window.updateOpacity = (v)=>{
+
+    lipMaterial.uniforms.uOpacity.value =
+        parseFloat(v);
+
+    document.getElementById("int-val")
+        .innerText =
+        Math.round(v*100)+"%";
+};
+
+});
+
+</script>
 
 </body>
 </html>
