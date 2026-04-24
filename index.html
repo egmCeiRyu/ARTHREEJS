@@ -2,10 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>高度ARリップスタジオ - プレシジョンフィット</title>
+    <title>ARリップ - 高彩度エディション</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
     <style>
         :root {
             --accent: #ff4d6d;
@@ -23,7 +22,6 @@
             font-family: 'Hiragino Sans', sans-serif;
         }
 
-        /* コンテナ：ビデオとキャンバスを重ねる */
         #container {
             position: relative;
             width: 640px;
@@ -31,7 +29,6 @@
             border-radius: 20px;
             overflow: hidden;
             border: 2px solid #333;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
         }
 
         video, #three_container {
@@ -41,7 +38,6 @@
             transform: scaleX(-1);
         }
 
-        /* UIパネル：メニューを下に配置 */
         .ui-panel {
             margin-top: 20px;
             background: rgba(25, 25, 25, 0.95);
@@ -52,15 +48,6 @@
             flex-direction: column;
             align-items: center;
             border: 1px solid #444;
-            backdrop-filter: blur(10px);
-        }
-
-        .ui-title {
-            font-size: 13px;
-            letter-spacing: 1px;
-            color: #888;
-            margin-bottom: 15px;
-            font-weight: bold;
         }
 
         .swatches {
@@ -82,18 +69,12 @@
             .swatch.active {
                 border-color: white;
                 transform: scale(1.15);
-                box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
             }
-
-        .slider-container {
-            width: 100%;
-        }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
             cursor: pointer;
-            height: 6px;
         }
 
         .labels {
@@ -103,7 +84,6 @@
             font-size: 11px;
             color: #666;
             margin-top: 8px;
-            font-weight: bold;
         }
     </style>
 </head>
@@ -115,8 +95,7 @@
     </div>
 
     <div class="ui-panel">
-        <div class="ui-title">リップカラーを選択してください</div>
-
+        <div class="ui-title" style="font-size:12px; color:#888; margin-bottom:10px;">リップカラーを選択</div>
         <div class="swatches">
             <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
             <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
@@ -124,11 +103,8 @@
             <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
             <div class="swatch" style="background: #000000;" onclick="changeColor(0x000000, this)"></div>
         </div>
-
-        <div class="slider-container">
-            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.7" oninput="updateOpacity(this.value)">
-            <div class="labels"><span>ナチュラル</span><span id="int-val">70%</span><span>ビビッド</span></div>
-        </div>
+        <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.8" oninput="updateOpacity(this.value)">
+        <div class="labels"><span>薄く</span><span id="int-val">80%</span><span>濃く</span></div>
     </div>
 
     <script type="module">
@@ -139,17 +115,14 @@
         let lastVideoTime = -1;
         let smoothedLandmarks = null;
 
-        // 精密なリップインデックス（解剖学的に正確なライン）
+        // 高精度インデックス
         const LIPS_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 408, 291, 321, 405, 314, 17, 84, 181, 91, 146, 61];
         const LIPS_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
 
         async function init() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: {
-                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-                    delegate: "GPU"
-                },
+                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
                 runningMode: "VIDEO", numFaces: 1
             });
 
@@ -161,21 +134,16 @@
             renderer.setSize(640, 480);
             document.getElementById('three_container').appendChild(renderer.domElement);
 
-            // スクリーンモード（Photoshop準拠）のマテリアル設定
+            // 高彩度マテリアル設定（NormalBlendingで色をしっかり出す）
             lipMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbe1e2d,
                 transparent: true,
-                opacity: 0.7,
-                side: THREE.DoubleSide,
-                blending: THREE.CustomBlending,
-                blendEquation: THREE.AddEquation,
-                blendSrc: THREE.OneMinusDstColorFactor,
-                blendDst: THREE.OneFactor
+                opacity: 0.8,
+                side: THREE.DoubleSide
             });
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
             scene.add(lipMesh);
-
             startCamera();
         }
 
@@ -199,9 +167,6 @@
 
         window.changeColor = (hex, el) => {
             lipMaterial.color.setHex(hex);
-            // 黒の場合はスクリーンモードをオフにする（黒が見えるようにするため）
-            lipMaterial.blending = (hex === 0x000000) ? THREE.NormalBlending : THREE.CustomBlending;
-            lipMaterial.needsUpdate = true;
             document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
             el.classList.add('active');
         };
@@ -212,18 +177,16 @@
         };
 
         function updateVisuals(landmarks) {
-            // スムージング処理
             if (!smoothedLandmarks) smoothedLandmarks = landmarks;
             else {
                 smoothedLandmarks = landmarks.map((p, i) => ({
-                    x: smoothedLandmarks[i].x * 0.4 + p.x * 0.6,
-                    y: smoothedLandmarks[i].y * 0.4 + p.y * 0.6
+                    x: smoothedLandmarks[i].x * 0.5 + p.x * 0.5,
+                    y: smoothedLandmarks[i].y * 0.5 + p.y * 0.5
                 }));
             }
 
-            // --- フィッティング補正 (yOffset) ---
-            // 唇の上が皮膚に食い込まないよう、わずかに下にずらします
-            const yOffset = 0.0035;
+            // yOffsetの微調整：さらに正確にフィットさせる
+            const yOffset = 0.003;
 
             const shape = new THREE.Shape();
             shape.moveTo(smoothedLandmarks[LIPS_OUTER[0]].x, 1 - (smoothedLandmarks[LIPS_OUTER[0]].y + yOffset));
@@ -235,7 +198,6 @@
             shape.holes.push(hole);
 
             lipMesh.geometry.dispose();
-            // 曲線の解像度を16に設定し、山の部分を滑らかに
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 16);
             renderer.render(scene, camera);
         }
