@@ -2,11 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Anatomical AR Lips - Subtle Fit</title>
-
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Makeup Studio - Three.js Shader</title>
     <style>
         :root {
             --accent: #ff4d6d;
@@ -15,241 +12,282 @@
         body {
             margin: 0;
             background: #050505;
-            overflow: hidden;
+            color: white;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            color: white;
+            font-family: sans-serif;
+            overflow: hidden;
         }
 
         #container {
             position: relative;
             width: 640px;
             height: 480px;
-            background: #000;
-            border-radius: 30px;
+            border-radius: 24px;
             overflow: hidden;
-            border: 1px solid #333;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            border: 2px solid #333;
+            background: black;
         }
 
-        video, #three_container {
+        /* Camadas de Vídeo e Render */
+        #input-video {
             position: absolute;
             width: 100%;
             height: 100%;
-            transform: scaleX(-1);
             object-fit: cover;
+            transform: scaleX(-1);
         }
 
-        /* Painel de Controle UI Ajustado */
+        #three-canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            transform: scaleX(-1);
+        }
+
         .ui-panel {
-            margin-top: 25px;
-            background: rgba(20, 20, 20, 0.95);
-            padding: 20px;
-            border-radius: 25px;
-            width: 550px;
+            margin-top: 20px;
+            background: rgba(25, 25, 25, 0.95);
+            padding: 25px;
+            border-radius: 30px;
+            width: 580px;
             display: flex;
             flex-direction: column;
             align-items: center;
             border: 1px solid #444;
-            backdrop-filter: blur(10px);
-        }
-
-        .ui-title {
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 15px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            backdrop-filter: blur(15px);
+            z-index: 10;
         }
 
         .swatches {
             display: flex;
             justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
+            gap: 14px;
+            margin-bottom: 22px;
         }
 
         .swatch {
-            width: 38px;
-            height: 38px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             cursor: pointer;
             border: 3px solid transparent;
-            transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transition: 0.3s;
         }
 
             .swatch.active {
                 border-color: white;
-                transform: scale(1.1);
-                box-shadow: 0 0 15px rgba(255,255,255,0.2);
+                transform: scale(1.2);
+                box-shadow: 0 0 15px var(--accent);
             }
-
-        .slider-container {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
 
         input[type=range] {
             width: 100%;
             accent-color: var(--accent);
             cursor: pointer;
             height: 6px;
-            border-radius: 5px;
         }
 
         .labels {
             display: flex;
             justify-content: space-between;
             width: 100%;
-            font-size: 10px;
-            color: #666;
-            margin-top: 8px;
+            font-size: 11px;
+            color: #888;
+            margin-top: 10px;
             font-weight: bold;
+        }
+
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #222;
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
 <body>
 
     <div id="container">
-        <video id="webcam" autoplay playsinline></video>
-        <div id="three_container"></div>
+        <div id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top:15px; font-size:12px; color: #666;">INITIALIZING SHADER ENGINE...</p>
+        </div>
+        <video id="input-video" autoplay playsinline></video>
+        <canvas id="three-canvas"></canvas>
     </div>
 
     <div class="ui-panel">
-        <div class="ui-title">カラーを選択してください</div>
         <div class="swatches">
-            <div class="swatch active" style="background: #be1e2d;" onclick="changeColor(0xbe1e2d, this)"></div>
-            <div class="swatch" style="background: #ff4d6d;" onclick="changeColor(0xff4d6d, this)"></div>
-            <div class="swatch" style="background: #f28b82;" onclick="changeColor(0xf28b82, this)"></div>
-            <div class="swatch" style="background: #4a0e1e;" onclick="changeColor(0x4a0e1e, this)"></div>
-            <div class="swatch" style="background: #000000;" onclick="changeColor(0x000000, this)"></div>
+            <div id="btn-red" class="swatch active" style="background: #be1e2d;"></div>
+            <div id="btn-pink" class="swatch" style="background: #ff4d6d;"></div>
+            <div id="btn-nude" class="swatch" style="background: #f28b82;"></div>
+            <div id="btn-dark" class="swatch" style="background: #4a0e1e;"></div>
+            <div id="btn-black" class="swatch" style="background: #000000;"></div>
         </div>
-        <div class="slider-container">
-            <input type="range" id="opacitySlider" min="0.1" max="1.0" step="0.01" value="0.4" oninput="updateOpacity(this.value)">
-            <div class="labels"><span>ナチュラル</span><span id="int-val">40%</span><span>ビビッド</span></div>
+        <div style="width:100%">
+            <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="0.6">
+            <div class="labels"><span>NATURAL</span><span id="val">60%</span><span>VIVID</span></div>
         </div>
     </div>
 
-    <script type="module">
-        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-        const video = document.getElementById("webcam");
-        let faceLandmarker, scene, camera, renderer, lipMesh, lipMaterial;
-        let lastVideoTime = -1;
-        let smoothedLandmarks = null;
+    <script>
+        const videoElement = document.getElementById('input-video');
+        const canvasElement = document.getElementById('three-canvas');
+        const loadingElement = document.getElementById('loading');
 
-        // ÍNDICES ANATÔMICOS DE PRECISÃO (40 PONTOS)
-        const LIPS_OUTER_DETAILED = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 408, 270, 269, 267, 0, 37, 39, 40, 185, 61];
-        const LIPS_INNER_DETAILED = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+        let scene, camera, renderer, lipsMesh, lipstickMaterial;
+        let faceMesh;
 
-        async function init() {
-            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
-            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
-                runningMode: "VIDEO", numFaces: 1
-            });
+        // --- ÍNDICES DOS LÁBIOS (MediaPipe FaceMesh) ---
+        const LIP_INDICES = [
+            61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 306, 292, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78, 62, 76, 61
+        ];
 
-            scene = new THREE.Scene();
-            camera = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
-            camera.position.z = 1;
-
-            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-            renderer.setSize(640, 480);
-            renderer.setPixelRatio(1);
-            document.getElementById('three_container').appendChild(renderer.domElement);
-
-            // --- MELHORIA DE NATURALIDADE: MODO DE MESCLAGEM ---
-            // Usamos CustomBlending para simular a transparência real de um batom cremoso,
-            // preservando a textura e as ranhuras dos lábios reais.
-            lipMaterial = new THREE.MeshBasicMaterial({
-                color: 0xbe1e2d,
-                transparent: true,
-                opacity: 0.4, // Padrão mais baixo e natural
-                side: THREE.DoubleSide,
-                blending: THREE.CustomBlending,
-                blendEquation: THREE.AddEquation,
-                blendSrc: THREE.SrcAlphaFactor,
-                blendDst: THREE.OneMinusSrcAlphaFactor
-            });
-
-            lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
-            scene.add(lipMesh);
-            startCamera();
-        }
-
-        function startCamera() {
-            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then((stream) => {
-                video.srcObject = stream;
-                video.addEventListener("loadeddata", predictWebcam);
-            });
-        }
-
-        async function predictWebcam() {
-            if (lastVideoTime !== video.currentTime) {
-                lastVideoTime = video.currentTime;
-                const results = faceLandmarker.detectForVideo(video, performance.now());
-                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    updateVisuals(results.faceLandmarks[0]);
-                }
+        // --- SHADERS GLSL PARA QUALIDADE PROFISSIONAL ---
+        const vertexShader = `
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            void main() {
+                vUv = uv;
+                vNormal = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
             }
-            window.requestAnimationFrame(predictWebcam);
+        `;
+
+        const fragmentShader = `
+            uniform vec3 uColor;
+            uniform float uOpacity;
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            void main() {
+                float fresnel = pow(1.5 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+                vec3 color = mix(uColor, uColor * 0.7, fresnel);
+                gl_FragColor = vec4(color, uOpacity);
+            }
+        `;
+
+        function initThree() {
+            scene = new THREE.Scene();
+            camera = new THREE.Camera(); // MediaPipe usa clip space (-1 a 1)
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvasElement, alpha: true, antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(640, 480);
+
+            lipstickMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    uColor: { value: new THREE.Color(0xbe1e2d) },
+                    uOpacity: { value: 0.6 }
+                },
+                vertexShader,
+                fragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+
+            const geometry = new THREE.BufferGeometry();
+            lipsMesh = new THREE.Mesh(geometry, lipstickMaterial);
+            scene.add(lipsMesh);
         }
 
-        window.changeColor = (hex, el) => {
-            lipMaterial.color.setHex(hex);
-            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-            el.classList.add('active');
-        };
+        function onResults(results) {
+            loadingElement.style.display = 'none';
 
-        window.updateOpacity = (val) => {
-            lipMaterial.opacity = val;
-            document.getElementById('int-val').innerText = Math.round(val * 100) + "%";
-        };
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                const positions = [];
+                const indices = [];
 
-        function updateVisuals(landmarks) {
-            // Suavização Temporal (LERP 0.75) para estabilidade
-            if (!smoothedLandmarks) smoothedLandmarks = landmarks;
-            else smoothedLandmarks = landmarks.map((p, i) => ({
-                x: (smoothedLandmarks[i].x * 0.75) + (p.x * 0.25),
-                y: (smoothedLandmarks[i].y * 0.75) + (p.y * 0.25)
-            }));
+                // Converte landmarks em coordenadas Three.js
+                LIP_INDICES.forEach((idx) => {
+                    const p = landmarks[idx];
+                    positions.push((p.x - 0.5) * 2, (0.5 - p.y) * 2, -p.z * 2);
+                });
 
-            const mouthShape = new THREE.Shape();
-            const startOuter = smoothedLandmarks[LIPS_OUTER_DETAILED[0]];
-            mouthShape.moveTo(startOuter.x, 1 - startOuter.y);
+                // Cria triângulos simples (Fan format)
+                for (let i = 1; i < LIP_INDICES.length - 1; i++) {
+                    indices.push(0, i, i + 1);
+                }
 
-            // --- AJUSTE ANATÔMICO SUTIL ---
-            LIPS_OUTER_DETAILED.forEach(idx => {
-                const p = smoothedLandmarks[idx];
-                mouthShape.lineTo(p.x, 1 - p.y);
-            });
-
-            // Furo interno para não pintar os dentes
-            const holePath = new THREE.Path();
-            const startInner = smoothedLandmarks[LIPS_INNER_DETAILED[0]];
-            holePath.moveTo(startInner.x, 1 - startInner.y);
-            LIPS_INNER_DETAILED.forEach(idx => {
-                const p = smoothedLandmarks[idx];
-                holePath.lineTo(p.x, 1 - p.y);
-            });
-
-            mouthShape.holes.push(holePath);
-
-            lipMesh.geometry.dispose();
-            // ShapeGeometry(shape, 12) garante curvas suaves e anatômicas
-            lipMesh.geometry = new THREE.ShapeGeometry(mouthShape, 12);
-
+                lipsMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                lipsMesh.geometry.setIndex(indices);
+                lipsMesh.geometry.computeVertexNormals();
+                lipsMesh.geometry.attributes.position.needsUpdate = true;
+            }
             renderer.render(scene, camera);
         }
 
-        init();
+        // --- CONTROLES DE UI ---
+        const colors = {
+            'btn-red': 0xbe1e2d,
+            'btn-pink': 0xff4d6d,
+            'btn-nude': 0xf28b82,
+            'btn-dark': 0x4a0e1e,
+            'btn-black': 0x000000
+        };
+
+        Object.keys(colors).forEach(id => {
+            document.getElementById(id).addEventListener('click', (e) => {
+                document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+                e.target.classList.add('active');
+                lipstickMaterial.uniforms.uColor.value.setHex(colors[id]);
+            });
+        });
+
+        document.getElementById('opacitySlider').addEventListener('input', (e) => {
+            const val = e.target.value;
+            document.getElementById('val').innerText = Math.round(val * 100) + "%";
+            lipstickMaterial.uniforms.uOpacity.value = parseFloat(val);
+        });
+
+        // --- INICIALIZAÇÃO ---
+        initThree();
+
+        faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        faceMesh.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => { await faceMesh.send({ image: videoElement }); },
+            width: 640, height: 480
+        });
+        cameraUtils.start();
+
     </script>
 </body>
 </html>
