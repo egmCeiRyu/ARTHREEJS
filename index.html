@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>AR Lipstick Banuba Pro - Final Fixed</title>
+    <title>AR Lipstick Banuba Pro - Soft Occlusion</title>
     <style>
         :root {
             --accent: #ff4d6d;
@@ -44,7 +44,7 @@
 
         .ui-panel {
             margin-top: 25px;
-            background: rgba(20,20,20,.95);
+            background: rgba(20, 20, 20, .95);
             padding: 20px;
             border-radius: 25px;
             width: 550px;
@@ -162,22 +162,23 @@
                             varying vec2 vUv;
 
                             void main(){
-                                // 1. MÁSCARA DE BORDA (Feathering)
-                                float mask = smoothstep(0.0, 0.1, vUv.x) * smoothstep(1.0, 0.9, vUv.x) *
-                                             smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
+                                // 1. MÁSCARA DE BORDA (Feathering mais suave)
+                                float mask = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x) *
+                                             smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
 
-                                // 2. OCLUSÃO INTERNA (Escurece o centro para dar profundidade)
-                                float occlusion = smoothstep(0.0, 0.45, abs(vUv.y - 0.5));
-                                occlusion = pow(occlusion, 0.4);
+                                // 2. OCLUSÃO INTERNA SUAVIZADA
+                                // Mudamos a base de 0.2 para 0.6 para que o centro não fique preto, apenas um pouco mais escuro
+                                float occlusion = smoothstep(0.0, 0.5, abs(vUv.y - 0.5));
+                                occlusion = mix(0.55, 1.0, occlusion);
 
-                                // 3. GLOSS DINÂMICO (Simula luz nos lábios superior e inferior)
-                                float upperGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.5), 3.0);
-                                float lowerGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 4.0), 4.0);
-                                float gloss = (upperGloss + lowerGloss) * 0.25;
+                                // 3. GLOSS (Brilho focado)
+                                float upperGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.78)) * 4.0), 4.0);
+                                float lowerGloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.22)) * 4.5), 5.0);
+                                float gloss = (upperGloss + lowerGloss) * 0.22;
 
-                                // 4. COMPOSIÇÃO DE COR
-                                vec3 col = uColor * (0.2 + 0.8 * occlusion); // Aplica sombra interna
-                                col += vec3(gloss); // Adiciona brilho de luz
+                                // 4. COMPOSIÇÃO FINAL
+                                vec3 col = uColor * occlusion;
+                                col += vec3(gloss);
 
                                 gl_FragColor = vec4(col, mask * uOpacity);
                             }
@@ -221,8 +222,8 @@
 
                 const center = smoothed[13];
                 const fit = (p) => ({
-                    x: center.x + (p.x - center.x) * 1.02, // Escala ajustada para evitar "aura"
-                    y: center.y + (p.y - center.y) * 1.02
+                    x: center.x + (p.x - center.x) * 1.015,
+                    y: center.y + (p.y - center.y) * 1.015
                 });
 
                 const shape = new THREE.Shape();
@@ -241,9 +242,8 @@
                 shape.holes = [hole];
 
                 if (lipMesh.geometry) lipMesh.geometry.dispose();
-                lipMesh.geometry = new THREE.ShapeGeometry(shape, 8); // Aumentado para 8 para curvas mais suaves
+                lipMesh.geometry = new THREE.ShapeGeometry(shape, 8);
 
-                // Gerar UVs precisas para o Shader
                 const pos = lipMesh.geometry.attributes.position;
                 const box = new THREE.Box3().setFromBufferAttribute(pos);
                 const size = new THREE.Vector3();
