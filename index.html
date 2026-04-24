@@ -132,20 +132,59 @@
             renderer.setSize(640, 480);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-            lipMaterial = new THREE.ShaderMaterial({
+lipMaterial = new THREE.ShaderMaterial({
                 transparent: true,
-                uniforms: { uColor: { value: new THREE.Color(0xbe1e2d) }, uOpacity: { value: 0.58 } },
-                vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                uniforms: {
+                    uColor: { value: new THREE.Color(0xbe1e2d) },
+                    uOpacity: { value: 0.58 }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    varying vec3 vPosition;
+                    void main() {
+                        vUv = uv;
+                        vPosition = position;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
                 fragmentShader: `
-                        uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
-                        void main() {
-                            float mask = smoothstep(0.0, 0.05, vUv.x) * smoothstep(1.0, 0.95, vUv.x) * smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
-                            float occlusion = mix(0.75, 1.0, smoothstep(0.0, 0.45, abs(vUv.y - 0.5)));
-                            float gloss = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.5)) * 2.5), 5.0) * 0.22;
-                            vec3 finalColor = (uColor * occlusion) + vec3(gloss);
-                            gl_FragColor = vec4(finalColor, uOpacity * mask);
-                        }
-                    `
+                    uniform vec3 uColor;
+                    uniform float uOpacity;
+                    varying vec2 vUv;
+
+                    void main() {
+                        // 1. MÁSCARA DE BORDA (Feathering suave)
+                        float mask = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x) *
+                                     smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
+
+                        // 2. PROFUNDIDADE (Occlusion)
+                        // Escurece levemente o centro horizontal para dar volume 3D
+                        float occ = mix(0.7, 1.0, smoothstep(0.0, 0.4, abs(vUv.y - 0.5)));
+
+                        // 3. GLOSS PRINCIPAL (Centro dos lábios)
+                        // Simula o reflexo de uma ring light ou luz frontal
+                        float gloss1 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.75)) * 3.5), 8.0) * 0.6; // Superior
+                        float gloss2 = pow(max(0.0, 1.0 - distance(vUv, vec2(0.5, 0.25)) * 3.5), 8.0) * 0.6; // Inferior
+
+                        // 4. MICRO-REFLEXOS (Wet Effect)
+                        // Pequenos pontos de luz para parecer textura de gloss molhado
+                        float wet = pow(max(0.0, 1.0 - abs(vUv.y - 0.72) * 10.0), 20.0) * 0.3;
+                        wet += pow(max(0.0, 1.0 - abs(vUv.y - 0.28) * 10.0), 20.0) * 0.3;
+
+                        // 5. BRILHO DE BORDA (Fresnel Rim Light)
+                        // Dá aquele reflexo sedoso nas extremidades curvas
+                        float rim = pow(1.0 - mask, 2.0) * 0.15;
+
+                        // COMPOSIÇÃO FINAL
+                        vec3 baseColor = uColor * occ;
+                        vec3 reflection = vec3(1.0) * (gloss1 + gloss2 + wet + rim);
+                        
+                        // Mistura a cor com os reflexos brancos
+                        vec3 finalColor = baseColor + reflection;
+
+                        gl_FragColor = vec4(finalColor, mask * uOpacity);
+                    }
+                `
             });
 
             lipMesh = new THREE.Mesh(new THREE.BufferGeometry(), lipMaterial);
@@ -195,7 +234,7 @@ function updateLips(landmarks) {
                 // 1. ARCO DO CUPIDO (Pontos superiores centrais)
                 // Aumente para 1.05+ para CONVEXO (subir) | Diminua para 0.95- para CÔNCAVO (descer)
                 if (id === 37 || id === 0 || id === 267) {
-                    sY = 0.98; 
+                    sY = 0.95; 
                 }
 
                 // 2. BASE INFERIOR (Ponto central de baixo)
