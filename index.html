@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced AR Makeup - Three.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root { --accent: #ff4d6d; }
+        body { margin: 0; background: #050505; color: white; font-family: sans-serif; overflow: hidden; }
+        #container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        video, canvas { position: absolute; border-radius: 20px; transform: scaleX(-1); }
+        .ui { position: absolute; bottom: 30px; background: rgba(20,20,20,0.9); padding: 20px; border-radius: 25px; display: flex; flex-direction: column; align-items: center; backdrop-filter: blur(10px); border: 1px solid #333; }
+        .swatches { display: flex; gap: 12px; margin-bottom: 15px; }
+        .swatch { width: 35px; height: 35px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.3s; }
+        .swatch.active { border-color: white; transform: scale(1.1); }
+        input[type=range] { width: 200px; accent-color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <video id="input_video" style="opacity: 0;"></video>
+    <div id="canvas_container"></div>
+    
+    <div class="ui">
+        <div class="swatches">
+            <div class="swatch active" style="background: #be1e2d;" onclick="updateLipstick(0xbe1e2d, 0.8, this)"></div>
+            <div class="swatch" style="background: #ff4d6d;" onclick="updateLipstick(0xff4d6d, 0.5, this)"></div>
+            <div class="swatch" style="background: #4a0e1e;" onclick="updateLipstick(0x4a0e1e, 0.9, this)"></div>
+            <div class="swatch" style="background: #f28b82;" onclick="updateLipstick(0xf28b82, 0.4, this)"></div>
+        </div>
+        <input type="range" id="glossRange" min="0" max="200" value="100" oninput="updateGloss(this.value)">
+        <div style="font-size: 10px; margin-top: 5px; color: #888;">GLOSS INTENSITY</div>
+    </div>
+</div>
+
+<script type="module">
+    const videoElement = document.getElementById('input_video');
+    let scene, camera, renderer, faceMesh3D, lipstickMaterial;
+    let videoTexture;
+
+    // Pontos UV simplificados para mapear o batom na malha 3D
+    const LIP_INDICES = [61, 185, 40, 39, 37, 0, 267, 269, 270, 408, 415, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146];
+
+    function initThree() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(45, 640/480, 0.1, 1000);
+        camera.position.z = 2;
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(640, 480);
+        document.getElementById('canvas_container').appendChild(renderer.domElement);
+
+        // Luz Ambiente + Luz de Ponto para criar o Brilho (Specular)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0xffffff, 1);
+        pointLight.position.set(0, 0, 2);
+        scene.add(pointLight);
+
+        // Material PBR (Physically Based Rendering)
+        lipstickMaterial = new THREE.MeshPhongMaterial({
+            color: 0xbe1e2d,
+            transparent: true,
+            opacity: 0.6,
+            shininess: 100,
+            specular: 0xffffff,
+            side: THREE.DoubleSide
+        });
+
+        const geometry = new THREE.BufferGeometry();
+        faceMesh3D = new THREE.Mesh(geometry, lipstickMaterial);
+        scene.add(faceMesh3D);
+    }
+
+    window.updateLipstick = (color, op, el) => {
+        lipstickMaterial.color.setHex(color);
+        lipstickMaterial.opacity = op;
+        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+    };
+
+    window.updateGloss = (val) => {
+        lipstickMaterial.shininess = val;
+    };
+
+    // --- NOVO CODIGO CORRIGIDO (Foco em Encaixe) ---
+
+    function onResults(results) {
+        // Ocultar overlay de carregamento quando os resultados chegam
+        loadingOverlay.style.display = 'none';
+
+        // Sincronizar o tamanho interno do Canvas com o vídeo real
+        // Isso resolve problemas de escala em diferentes resoluções de câmera
+        if (canvasElement.width !== videoElement.videoWidth) {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            // Atualizar o renderer do Three.js para o novo tamanho
+            renderer.setSize(canvasElement.width, canvasElement.height);
+            camera.aspect = canvasElement.width / canvasElement.height;
+            camera.updateProjectionMatrix();
+        }
+
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            let rawLandmarks = results.multiFaceLandmarks[0];
+
+            // --- FILTRO DE ESTABILIDADE (Lerp) ---
+            // (Mantenha sua lógica de suavização aqui para evitar o tremido)
+
+            canvasCtx.save();
+
+            //AJUSTE DE PRECISÃO: Criamos o caminho exato da boca (outer - inner)
+            canvasCtx.beginPath();
+
+            // Desenha o contorno principal
+            const startPoint = smoothedLandmarks[LIPS_OUTER[0]];
+            // --- AJUSTE DE OFFSET ---
+            // Adicione +2 ou +3 ao X se a boca estiver muito para a esquerda, 
+            // ou -2 se estiver para a direita (como na imagem).
+            const centerXOffset = -3; // Ajuste manual de calibração
+
+            canvasCtx.moveTo(
+                (startPoint.x * canvasElement.width) + centerXOffset,
+                startPoint.y * canvasElement.height
+            );
+
+            LIPS_OUTER.forEach(index => {
+                const p = smoothedLandmarks[index];
+                canvasCtx.lineTo(
+                    (p.x * canvasElement.width) + centerXOffset,
+                    p.y * canvasElement.height
+                );
+            });
+
+            // Subtração do centro (Dentes)
+            LIPS_INNER.forEach((index, i) => {
+                const p = smoothedLandmarks[index];
+                if (i === 0) canvasCtx.moveTo((p.x * canvasElement.width) + centerXOffset, p.y * canvasElement.height);
+                else canvasCtx.lineTo((p.x * canvasElement.width) + centerXOffset, p.y * canvasElement.height);
+            });
+
+            // --- REFINAMENTO DE BORDA ---
+            canvasCtx.lineJoin = 'round';
+            canvasCtx.lineCap = 'round';
+            canvasCtx.globalCompositeOperation = "multiply";
+            canvasCtx.filter = "blur(1.5px)"; // Suaviza a borda da maquiagem
+
+            canvasCtx.fillStyle = `rgba(${currentRGB.r}, ${currentRGB.g}, ${currentRGB.b}, ${currentOpacity})`;
+            canvasCtx.fill('evenodd');
+
+            canvasCtx.restore();
+        }
+    }
+
+    const faceMeshIA = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+    faceMeshIA.setOptions({ refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    faceMeshIA.onResults(onResults);
+
+    const cameraApp = new Camera(videoElement, {
+        onFrame: async () => {
+            await faceMeshIA.send({image: videoElement});
+        },
+        width: 640, height: 480
+    });
+
+    initThree();
+    cameraApp.start();
+    videoElement.style.opacity = "1";
+</script>
+
+</body>
+</html>
