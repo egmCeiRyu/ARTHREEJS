@@ -213,7 +213,7 @@
                 const p = smoothed[id];
 
                 // LARGURA DO FURO: Deve ser igual ao sX do contorno acima.
-                let sX_inner = 1.15;
+                let sX_inner = 1.03;
 
                 // LIMPEZA DOS DENTES: Aumente este sY (ex: 1.08 ou 1.10) para remover a cor dos dentes.
                 let sY_inner = 1.05;
@@ -228,7 +228,7 @@
             // --- 4. QUALIDADE DO SHAPE ---
             // Mude de 8 para 12 se quiser bordas mais arredondadas e suaves.
             if (lipMesh.geometry) lipMesh.geometry.dispose();
-            lipMesh.geometry = new THREE.ShapeGeometry(shape, 8);
+            lipMesh.geometry = new THREE.ShapeGeometry(shape, 5);
 
             // Mapeamento UV e renderização final
             const pos = lipMesh.geometry.attributes.position;
