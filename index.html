@@ -2,11 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AR Lipstick HD - Ultra Performance</title>
-
+    <title>AR Lipstick HD - Color Corrected</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
     <style>
         :root {
             --accent: #ff4d6d;
@@ -164,7 +162,6 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById("three_container").appendChild(renderer.domElement);
 
-            // GERAÇÃO DA TEXTURA DE BRILHO (GLOSS) SEM BORDAS BRANCAS
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128;
             const ctx = canvas.getContext('2d');
@@ -179,8 +176,8 @@
             lipMaterial = new THREE.MeshPhongMaterial({
                 color: 0xbe1e2d,
                 specularMap: glossMap,
-                specular: 0xffffff,
-                shininess: 120,
+                specular: 0x222222,    // Reduzido para não branquear a cor
+                shininess: 80,         // Ajustado para gloss natural
                 transparent: true,
                 opacity: 0.45,
                 side: THREE.DoubleSide,
@@ -189,7 +186,7 @@
             });
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            const light = new THREE.DirectionalLight(0xffffff, 0.5);
+            const light = new THREE.DirectionalLight(0xffffff, 0.4);
             light.position.set(0, 0, 1);
             scene.add(light);
 
@@ -261,7 +258,6 @@
             if (lipMesh.geometry) lipMesh.geometry.dispose();
             lipMesh.geometry = new THREE.ShapeGeometry(shape, 4);
 
-            // MAPEAMENTO UV PARA O GLOSS FICAR CENTRALIZADO
             const pos = lipMesh.geometry.attributes.position;
             const bBox = new THREE.Box3().setFromBufferAttribute(pos);
             const size = new THREE.Vector3();
